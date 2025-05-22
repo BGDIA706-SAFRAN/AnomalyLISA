@@ -1,0 +1,6 @@
+####################
+## AgentIA X
+####################
+# Fichier requirement spécifique pour l'agent
+
+#python==*
