@@ -7,8 +7,41 @@ Il fonctionne en ligne de commande ou en appel :
     - python **args**
 
 Où **args** sont a minima :
-    python ia_sam.py -h
-    ...
+    python ia_lisa.py -h
+    usage: AgentIA SAM [-h] [--logfile [LOGFILE]] [--savefile [SAVEFILE]] [--task {run,train,background}] [--nolog]
+                       [--output [OUTPUT]] [--checkpoint CHECKPOINT] [--device DEVICE] --input_img INPUT_IMG
+                       --input_prompt INPUT_PROMPT [--input_expert INPUT_EXPERT]
+                       [--version {xinlai/LISA-7B-v1-explanatory,xinlai/LISA-13B-llama2-v1-explanatory,Senqiao/LISA_Plus_7b}]
+                       [--precision {fp32,bf16,fp16}] [--image_size IMAGE_SIZE] [--load_in_8bit] [--load_in_4bit]
+
+    command line LISA
+
+    options:
+      -h, --help            show this help message and exit
+      --logfile [LOGFILE]   sortie du programme
+      --savefile [SAVEFILE]
+                            spécifie s'il faut sauvegarder. Si aucun fichier, alors stdout sauf pour 'train'
+      --task {run,train,background}
+                            [défaut=run] tâche à accomplir par l'agent
+      --nolog               désactive les log
+      --output [OUTPUT]     [défaut=results] chemin du dossier de sortie
+      --checkpoint CHECKPOINT
+                            [défaut=checkpoints] dossier où sont les poids du modèle
+      --device DEVICE       [défaut=cpu] device où charger SAM [auto, cpu, cuda, torch_directml]
+      --input_img INPUT_IMG
+                            chemin de l'image d'entrée
+      --input_prompt INPUT_PROMPT
+                            chemin du fichier prompt d'entrée
+      --input_expert INPUT_EXPERT
+                            chemin du fichier prompt des experts
+      --version {xinlai/LISA-7B-v1-explanatory,xinlai/LISA-13B-llama2-v1-explanatory,Senqiao/LISA_Plus_7b}
+                            [défaut=LISA7B] dépôt du modèle
+      --precision {fp32,bf16,fp16}
+                            precision for inference
+      --image_size IMAGE_SIZE
+                            image size
+      --load_in_8bit
+      --load_in_4bit
     
 
 Et en mode exécution Python des args optionnels supplémentaires sont :
@@ -537,7 +570,7 @@ def parse_args() -> argparse.Namespace:
     list_precision_model = ["fp32", "bf16", "fp16"]
 
     # 2 - Création du parseur à arguments:
-    parser = argparse.ArgumentParser(prog="AgentIA SAM",
+    parser = argparse.ArgumentParser(prog="AgentIA LISA",
                                      description="command line LISA")
 
     # 3 - Définition des arguments :
