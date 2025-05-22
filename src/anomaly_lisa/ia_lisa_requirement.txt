@@ -1,0 +1,12 @@
+####################
+## AgentIA SAM
+####################
+# Fichier requirement spécifique pour l'agent
+
+#python==3.10
+#python -m pip install -r LISA/requirements.txt
+#python -m pip install flash-attn==2.0.9 --no-build-isolation
+
+#LISA++
+#git switch lisa_plus
+scikit-learn
