@@ -51,6 +51,7 @@ conda activate $GLOBAL
 python --version
 python -m pip list |grep -E "numpy|torch"
 python pipeline.py -h
+python ia_sam.py --input=dog.jpeg --model-type=vit_b --bbox=[65,250,631,940] --task background --savefile --logfile
 
 conda deactivate
 ################

@@ -1,0 +1,9 @@
+####################
+## AgentIA SAM
+####################
+# Fichier requirement spécifique pour l'agent
+
+#python==*
+numpy
+torch
+cv2
