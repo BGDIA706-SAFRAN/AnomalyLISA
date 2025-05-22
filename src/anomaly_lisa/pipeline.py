@@ -101,6 +101,7 @@ class PipelineLogger:
             # console_handler.setLevel("DEBUG")
             logger.addHandler(console_handler)
         if isinstance(self.file, str):
+            os.makedirs(os.path.dirname(self.file), exist_ok=True)
             file_handler = logging.FileHandler(self.file, mode="a", encoding="utf-8")
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)

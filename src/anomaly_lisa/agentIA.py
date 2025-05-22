@@ -218,8 +218,10 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
 
         # CAS 2 : args spécifiques à la tâche
         local_arg = {"print": True}  # local print sans le logger
+        agent.logger("Action : exécution xxx ...")
         agent.run(local_arg)
     elif args["task"] == "train":
+        agent.logger("Action : entraînement ...")
         agent.train()
 
     # 3- Sauvegarde
@@ -229,6 +231,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     local_arg["save_filepath"] = args["save_filepath"]
     local_arg["save_is_print"] = args["save_is_print"]
     if is_saving:
+        agent.logger("Action : saving ...")
         agent.save(mode, local_arg)
 
     return agent
