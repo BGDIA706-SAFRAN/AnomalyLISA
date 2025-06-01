@@ -157,6 +157,60 @@ class Pipeline:
         self.logger = logger
         if logger is None:  # mode console
             self.logger = PipelineLogger()
+    
+    def test_sam_lisa(self):
+        import ia_sam
+        import ia_lisa
+        from ia_sam import Agent_SAM
+        from ia_lisa import Agent_LISA
+        from PIL import Image, ImageDraw
+        import numpy as np
+
+        args = {}
+        args["model_type"] = "vit_b"
+        args["checkpoint"] = args.get("checkpoint", DEFAULT_MODEL_FOLDER)
+        # args["device"] = args.get("device", ia_sam.DEVICE_GLOBAL)
+        args["device"] = "cpu"
+
+        agent_sam = Agent_SAM(self.logger, model_type=args["model_type"], checkpoint_path=args["checkpoint"], device=args["device"])
+
+        args["input"] = "../data/MMAD/MVTec-AD/carpet/test/cut/000.png"  # "dogs.jpeg"
+        args["bbox"] = "[65,250,631,940]"
+
+        image_filename = args["input"]
+        image_PIL = Image.open(image_filename)
+        image_PIL = image_PIL.convert("RGB")
+        image_rgb = np.array(image_PIL)
+        local_arg = {
+            "print": True,  # local print sans le logger
+            "sam_img_in": image_rgb,
+            "bbox": args["bbox"],
+        }
+        self.logger("Action : enlever le fond ...")
+        agent_sam.run(local_arg, mode="background")
+        agent_sam.save_results()
+
+        args["input_prompt_str"] = "There is an defect ? explain in details"
+        args["input_expert_str"] = ""
+        args["version"] = args.get("version", ia_lisa.DEFAULT_LISA_MODEL)
+        args["precision"] = args.get("precision", "bf16")
+        args["image_size"] = args.get("image_size", 1024)
+        args["load_in_8bit"] = args.get("load_in_8bit", False)
+        args["load_in_4bit"] = args.get("load_in_4bit", False)
+        args["model_max_length"] = args.get("model_max_length", ia_lisa.DEFAULT_LISA_MODEL_MAX_LENGTH)
+        args["lora_r"] = args.get("lora_r", ia_lisa.DEFAULT_LISA_MODEL_LORA)
+        args["vision_tower"] = args.get("vision_tower", ia_lisa.DEFAULT_LISA_MODEL_VISION_TOWER)
+        args["use_mm_start_end"] = args.get("use_mm_start_end", ia_lisa.DEFAULT_LISA_MODEL_USE_MM_START_END)
+        args["conv_type"] = args.get("conv_type", ia_lisa.DEFAULT_LISA_MODEL_CONV_TYPE)
+        args["device"] = args.get("device", ia_lisa.DEVICE_GLOBAL)
+
+        agent_lisa = Agent_LISA(args, logger=self.logger)
+
+        local_arg["lisa_img_in"] = agent_sam.results["img_without_bg"]
+        local_arg.update(args)
+        agent_lisa.logger("Action : exécution LISA courante ...")
+        agent_lisa.run(local_arg)
+        agent.save_results()
 
 
 ###############################################################################
@@ -222,6 +276,8 @@ def run_process(args: dict | None = None) -> Pipeline:
 
     # 1 - Création du pipeline
     pipeline = Pipeline(logger)
+    
+    pipeline.test_sam_lisa()
 
     return pipeline
 
@@ -248,6 +304,7 @@ def parse_args() -> argparse.Namespace:
                         default=sys.stdout, help="sortie du programme")
     parser.add_argument("--nolog", action='store_true',
                         help="désactive les log")
+    parser.add_argument("--test_sam", action='store_true')
     return parser.parse_args()
 
 
