@@ -151,7 +151,10 @@ class Agent_SAM(AgentIA):
         # 1-Vérification présence des poids sinon téléchargement
         url = self.SAM_URL.get(model_type, self.SAM_URL[DEFAULT_SAM_MODEL])
         # model = torch.utils.model_zoo.load_url(url, model_dir=model_dir, weights_only=True)
-        model = torch.hub.load_state_dict_from_url(url, model_dir=model_dir, weights_only=True)
+        try:
+            model = torch.hub.load_state_dict_from_url(url, model_dir=model_dir, weights_only=True)
+        except:  # ancienne version de Torch
+            model = torch.hub.load_state_dict_from_url(url, model_dir=model_dir)
         del model
 
         # 2-Création et chargement de SAM en mémoire demandée
@@ -179,10 +182,18 @@ class Agent_SAM(AgentIA):
         if image_rgb is None:
             self.logger("image non trouvée !", level=pipeline.logging.WARNING)
             return results
+        if isinstance(image_rgb, str):
+            if not os.path.exists(image_rgb):
+                self.logger(f"image non trouvée {image_rgb}!", level=pipeline.logging.WARNING)
+                return
+            self.logger(f"Chargement img {image_rgb}", level=pipeline.logging.INFO)
+            image_PIL = Image.open(image_rgb)
+            image_PIL = image_PIL.convert("RGB")
+            image_rgb = np.array(image_PIL)
         bbox = args.get("bbox")
         if bbox is None:
             h, w, _ = image_rgb.shape
-            bbox = [0, 0, w, h]  # [x1, y1, x2, y2]
+            bbox = f"[0, 0, {w}, {h}]"  # [x1, y1, x2, y2]
         box_np = np.array(ast.literal_eval(bbox))
         # TODO:Vérifier box in image ... 
         multimask_output = args.get("multimask_output", False)
@@ -376,7 +387,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     local_arg["save_filepath"] = args["save_filepath"]
     local_arg["save_is_print"] = args["save_is_print"]
     if is_saving:
-        agent.logger("Action : saving ...")
+        agent.logger("Action : sauvegarde ...")
         agent.save(mode, local_arg)
 
     return agent
