@@ -54,7 +54,7 @@ class PipelineLogger:
         instance(msg, level,    **kwargs)  wrapper sur la classe logging.Logger
             pour logger des messages.
             => équivalent à instance.logger.info|error|...|(msg, **kwargs)
-        setLevel(level, handler)    wrapper sur setLevel pour metter à jour le niveau   
+        setLevel(level, handler)    wrapper sur setLevel pour metter à jour le niveau
             de log des differents logger.
 
     ============
@@ -157,7 +157,7 @@ class Pipeline:
         self.logger = logger
         if logger is None:  # mode console
             self.logger = PipelineLogger()
-    
+
     def test_sam_lisa(self):
         import ia_sam
         import ia_lisa
@@ -276,7 +276,7 @@ def run_process(args: dict | None = None) -> Pipeline:
 
     # 1 - Création du pipeline
     pipeline = Pipeline(logger)
-    
+
     pipeline.test_sam_lisa()
 
     return pipeline

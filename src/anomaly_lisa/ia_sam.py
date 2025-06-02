@@ -134,7 +134,7 @@ class Agent_SAM(AgentIA):
         self.model = self.model.to(self.device)
 
     def load(self, model_type: str = DEFAULT_SAM_MODEL,
-                 model_dir: str = pipeline.DEFAULT_MODEL_FOLDER) -> torch.nn.Module:
+             model_dir: str = pipeline.DEFAULT_MODEL_FOLDER) -> torch.nn.Module:
         """Charge SAM soit à partir du disque soit en le téléchargeant.
 
         Utilise un hack en utilisant une fonction de Torch (`torch.hub.load_state_dict_from_url`)
@@ -195,7 +195,7 @@ class Agent_SAM(AgentIA):
             h, w, _ = image_rgb.shape
             bbox = f"[0, 0, {w}, {h}]"  # [x1, y1, x2, y2]
         box_np = np.array(ast.literal_eval(bbox))
-        # TODO:Vérifier box in image ... 
+        # TODO:Vérifier box in image ...
         multimask_output = args.get("multimask_output", False)
 
         # 1 - Prédiction SAM
@@ -219,6 +219,27 @@ class Agent_SAM(AgentIA):
 
         results["mask"] = mask
         self.results = results
+
+    def create_prompt(self, args: dict | None = None, mode="mask"):
+        """Crée le prompt expert associé à la tâche.
+
+        :param (dict) args: les arguments de la fonction
+        """
+        prompt = ""
+        if len(self.results) == 0:
+            self.logger(f"Pas de résultat pour créer le prompt en {mode}", level="error")
+            return
+
+        if args is None:
+            args = {}
+        is_print = args.get("print", False)
+        device = args.get("device", DEVICE_GLOBAL)
+        if is_print:
+            print("Création prompt de ", self.name)
+
+        # Faire quelque pour créer le prompt.
+
+        self.results["prompt"] = prompt
 
     def create_img_whitout_bg(self, mask, image_rgb, box_np):
         x_min, y_min, x_max, y_max = box_np
@@ -252,8 +273,10 @@ class Agent_SAM(AgentIA):
             args = {}
         filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
+        os.makedirs(foldername, exist_ok=True)
         img_mask_filename = f"{filename}_mask.jpg"
         img_bg_filename = f"{filename}_without_bg.jpg"
+        prompt_filename = f"{filename}_prompt.txt"
 
         img_to_save = []
         if self.results.get("mask") is not None:
@@ -264,11 +287,18 @@ class Agent_SAM(AgentIA):
             img_bg_PIL = Image.fromarray(self.results["img_without_bg"])
             img_to_save.append((img_bg_PIL, img_bg_filename))
 
+        # sauvegarde des images
         for img, filename in img_to_save:
             filepath = os.path.join(foldername, filename)
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             self.logger(f"Sauvegarde des résultats : {filepath}")
             img.save(filepath)
+
+        # sauvegarde d'un prompt expert
+        if self.results.get("prompt") is not None:
+            with open(filepath, "w") as f:
+                self.logger(f"Sauvegarde du prompt expert : {filepath}")
+                f.write(self.results["prompt"])
 
 
 ###############################################################################
@@ -289,7 +319,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     if args is None:
         args = {}
 
-    #3.1 args génériques
+    # 3.1 args génériques
     # task [--task TASK] = (str) "run", "train", ...
     args["task"] = args.get("task", "run")
     # nolog [--nolog] = (bool)
@@ -423,7 +453,7 @@ def parse_args() -> argparse.Namespace:
                                      description="command line SAM")
 
     # 3 - Définition des arguments :
-    #3.1 args génériques
+    # 3.1 args génériques
     parser.add_argument("--logfile", nargs='?', type=argparse.FileType("w"),
                         default=sys.stdout, help="sortie du programme")
     parser.add_argument("--savefile", nargs='?', type=argparse.FileType("w"),
@@ -443,7 +473,7 @@ def parse_args() -> argparse.Namespace:
 
     # 3.2 args spécifique SAM
     parser.add_argument("--bbox", type=str, default=None,
-                        help='coordonnées de la box au format [x_min, y_min, x_max, y_max]')                    
+                        help='coordonnées de la box au format [x_min, y_min, x_max, y_max]')
     parser.add_argument("--input", type=str, required=True,
                         help="chemin de l'image d'entrée")
     parser.add_argument("--output", type=str, nargs='?', default=pipeline.DEFAULT_SAVE_FOLDER,

@@ -42,7 +42,7 @@ Où **args** sont a minima :
                             image size
       --load_in_8bit
       --load_in_4bit
-    
+
 
 Et en mode exécution Python des args optionnels supplémentaires sont :
  - ...
@@ -131,7 +131,7 @@ class Agent_LISA(AgentIA):
 
     name: str = "LISA"
 
-    def __init__(self, args:dict, logger: PipelineLogger | None = None):
+    def __init__(self, args: dict, logger: PipelineLogger | None = None):
         """Initialise cette classe."""
         super().__init__(logger)
         self.models: dict = self.load(args)
@@ -141,7 +141,7 @@ class Agent_LISA(AgentIA):
         self.clip_image_processor = self.models["clip_image_processor"]
         self.transform = self.models["transform"]
 
-    def load(self, args:dict) -> dict:
+    def load(self, args: dict) -> dict:
         """Charge en mémoire le modèle LISA.
 
         :param (dict) args: les arguments nécessaire (ATTENTION : doivent exister)
@@ -352,6 +352,28 @@ class Agent_LISA(AgentIA):
         x = torch.nn.functional.pad(x, (0, padw, 0, padh))
         return x
 
+    def create_prompt(self, args: dict | None = None):
+        """Crée le prompt expert associé à la tâche.
+
+        :param (dict) args: les arguments de la fonction
+        """
+        prompt: sr = ""
+        if len(self.results) == 0:
+            self.logger(f"Pas de résultat pour créer le prompt en {mode}", level="error")
+            return
+
+        if args is None:
+            args = {}
+        is_print = args.get("print", False)
+        device = args.get("device", DEVICE_GLOBAL)
+        task = args.get("task", "run")
+        if is_print:
+            print(f"Création prompt pour {task} de ", self.name)
+
+        # Faire quelque pour créer le prompt.
+
+        self.results["prompt"] = prompt  # expert prompt pour une tâche donnée
+
     # Rappel classe mère AgentIA :
     # def train(self)
     # def save(self, mode: Literal["all", "model", "results"] = "all", args: dict | None = None)
@@ -371,22 +393,25 @@ class Agent_LISA(AgentIA):
         img_mask_filename = f"{filename}_mask.jpg"
         img_seg_filename = f"{filename}_seg.jpg"
         txt_filename = f"{filename}_answer.txt"
+        prompt_filename = f"{filename}_prompt.txt"
+        filepath = os.path.join(foldername, txt_filename)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
         global_mask = torch.concat(self.results["pred_masks"], dim=0).sum(dim=0, dtype=bool).cpu().numpy()
         mask = global_mask[:, :, None]
-        
+
         segmentation_color = np.array([255, 0, 0])
         image_np = args["lisa_img_in"]
         segmentation = np.ones(image_np.shape)*segmentation_color
         final_img = (1-mask)*image_np + mask*(image_np*0.5 + segmentation*.5)
         final_img = final_img.clip(0, 255).astype(np.uint8)
 
-        filepath = os.path.join(foldername, txt_filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        # sauvegarde du prompt réponse
         with open(filepath, "w") as f:
             self.logger(f"Sauvegarde des résultats : {filepath}")
             f.write(self.results["text_output"])
 
+        # sauvegarde des images résultats
         img_to_save = []
         img_mask_PIL = Image.fromarray(global_mask)
         img_to_save.append((img_mask_PIL, img_mask_filename))
@@ -397,6 +422,12 @@ class Agent_LISA(AgentIA):
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             self.logger(f"Sauvegarde des résultats : {filepath}")
             img.save(filepath)
+
+        # sauvegarde d'un prompt expert
+        if self.results.get("prompt") is not None:
+            with open(filepath, "w") as f:
+                self.logger(f"Sauvegarde du prompt expert : {filepath}")
+                f.write(self.results["prompt"])
 
 
 ###############################################################################
@@ -417,7 +448,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     if args is None:
         args = {}
 
-    #3.1 args génériques
+    # 3.1 args génériques
     # task [--task TASK] = (str) "run", "train", ...
     args["task"] = args.get("task", "run")
     # nolog [--nolog] = (bool)
@@ -470,7 +501,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     else:
         args["input_prompt_str"] = args["input_prompt"]
     # input_prompt_expert --input_prompt_expert FILENAME = (str) chemin de l'image
-    args["input_expert"] = args.get("input_expert", "expert_prompt.txt")  #??
+    args["input_expert"] = args.get("input_expert", "expert_prompt.txt")  # ??
     if os.path.exists(args["input_expert"]):
         with open(args["input_expert"], "r") as f:
             args["input_expert_str"] = f.read()
@@ -574,7 +605,7 @@ def parse_args() -> argparse.Namespace:
                                      description="command line LISA")
 
     # 3 - Définition des arguments :
-    #3.1 args génériques
+    # 3.1 args génériques
     parser.add_argument("--logfile", nargs='?', type=argparse.FileType("w"),
                         default=sys.stdout, help="sortie du programme")
     parser.add_argument("--savefile", nargs='?', type=argparse.FileType("w"),
@@ -637,4 +668,3 @@ if __name__ == "__main__":
     print(sys.argv)
     sys.exit(main(parse_args()))
 # end if
-

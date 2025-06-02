@@ -97,6 +97,20 @@ class AgentIA:
         """Entraînement le modèle de l'agent IA."""
         return
 
+    def create_prompt(self, args: dict | None = None):
+        """Crée le prompt expert associé à la tâche.
+
+        :param (dict) args: les arguments de la fonction
+        """
+        prompt = ""
+        if len(self.results) == 0:
+            self.logger(f"Pas de résultat pour créer le prompt en {mode}", level="error")
+            return
+
+        # Faire quelque pour créer le prompt.
+        self.results["prompt"] = prompt
+        return
+
     def save(self, mode: Literal["all", "model", "results"] = "all",
              args: dict | None = None):
         """Sauvegarde le modèle entraîné ou les résultats.
@@ -136,7 +150,9 @@ class AgentIA:
             args = {}
         filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
-        foldername = os.path.join(foldername, "agentX")  # Si beaucoup de fichier résultats
+        # foldername = os.path.join(foldername, "agentX")  # Si beaucoup de fichier résultats
+        os.makedirs(foldername, exist_ok=True)
+        prompt_filename = f"{filename}_prompt.txt"  # exemple de construction du nom de fichier
         return
 
 
@@ -260,7 +276,7 @@ def parse_args() -> argparse.Namespace:
                                      description="Ce que l'agent IA fait.")
 
     # 3 - Définition des arguments :
-    #3.1 args génériques
+    # 3.1 args génériques
     parser.add_argument("--logfile", nargs='?', type=argparse.FileType("w"),
                         default=sys.stdout, help="sortie du programme")
     parser.add_argument("--savefile", nargs='?', type=argparse.FileType("w"),
