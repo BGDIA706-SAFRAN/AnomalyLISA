@@ -49,7 +49,9 @@ Et en mode exécution Python des args optionnels supplémentaires sont :
 
 ===========
 Exemples :
+CUDA_VISIBLE_DEVICES=1 python ia_lisa.py --input_img=LISA/1466_2L1_cut.jpg  --input_prompt "There is a defect ? Explain in details." --device cuda --savefile
 
+CUDA_VISIBLE_DEVICES=1 python ia_lisa.py --input_img=../data/MMAD/MVTec-AD/carpet/test/cut/000.png --input_prompt ./user_prompt.txt --input_expert ./expert_prompt.txt --device cuda --savefile
 
 """
 __author__ = ['Nicolas Allègre', 'Sarah Garcia', 'Luca Hachani', 'François-Xavier Morel']
@@ -575,26 +577,27 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
 ###############################################################################
 # FONCTIONS MODE CONSOLE :
 def parse_args() -> argparse.Namespace:
-    """Gestion des arguments de l'agent SAM.
+    """Gestion des arguments de l'agent.
 
     ====
     Arguments :
-        task [--task TASK] = (str) "run", "train", "background"
+        task [--task TASK] = (str) "run", "train"
         logfile [--logfile [FILENAME]] = défaut stdout, None si pas FILENAME
         savefile [--savefile [FILENAME]] = défaut stdout, None si pas FILENAME
         nolog [--nolog] = (bool) désactive les logs
-        bbox [--bbox ["[x1,y1,x2,y2]"]] = (str(list)) = défaut None si non indiqué
-        input --input FILENAME = (str) chemin de l'image
         output [--output [FOLDER]] = (str) défaut 'results'
-        model_type [--model-type VIT_TYPE] = (str) "vit_h", "vit_l", "vit_b"
         checkpoint [--checkpoint FOLDER] = (str)
         device [--device DEVICE] = (str) 'auto, cpu, cuda, torch_directml'
+        input_img [--input_img [FILENAME]] = (str) image à utiliser
+        input_prompt [--input_prompt [STR | FILENAME]] = prompt ou fichier contenant le prompt
+        input_expert [--input_expert [STR | FILENAME]] = prompt ou fichier contenant le prompt
+        version [--version MODEL_TYPE] = (str) choix du modèle LISA-7B, LISA-13B ou LISA++
 
     :param (str) args: les arguments données au programme
     :return (argparse.Namespace):   les arguments parsés
     """
     # 1 - Définition des listes de choix :
-    list_task_agentIA = ["run", "train", "background"]
+    list_task_agentIA = ["run", "train"]
     list_model_LISA = ["xinlai/LISA-7B-v1-explanatory",
                        "xinlai/LISA-13B-llama2-v1-explanatory",
                        "Senqiao/LISA_Plus_7b"]
@@ -623,7 +626,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=str, default=pipeline.DEFAULT_MODEL_FOLDER,
                         help="[défaut=checkpoints] dossier où sont les poids du modèle")
     parser.add_argument("--device", type=str, default="cpu",
-                        help="[défaut=cpu] device où charger SAM [auto, cpu, cuda, torch_directml]")
+                        help="[défaut=cpu] device où charger le modèle [auto, cpu, cuda, torch_directml]")
 
     # 3.2 args spécifique LISA
     parser.add_argument("--input_img", type=str, required=True,
