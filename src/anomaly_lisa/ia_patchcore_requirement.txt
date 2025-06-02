@@ -1,0 +1,8 @@
+####################
+## AgentIA Patchcore
+####################
+# Fichier requirement spécifique pour l'agent
+
+#python==*
+anomalib[full]
+torchvision>=0.17.2
