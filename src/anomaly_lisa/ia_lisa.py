@@ -99,10 +99,11 @@ DEFAULT_SAVE_MODEL_FILENAME: Final[str] = "lisa_local.pth"
 DEFAULT_SAVE_RESULT_FILENAME: Final[str] = "LISA"
 DEFAULT_LISA_MODEL: Final[str] = "xinlai/LISA-7B-v1-explanatory"
 
+DEFAULT_LISA_MODEL_IMAGE_SIZE = 1024
 DEFAULT_LISA_MODEL_MAX_LENGTH = 512
 DEFAULT_LISA_MODEL_LORA = 8
 DEFAULT_LISA_MODEL_VISION_TOWER = "openai/clip-vit-large-patch14"
-DEFAULT_LISA_MODEL_USE_MM_START_END = False
+DEFAULT_LISA_MODEL_USE_MM_START_END = True
 DEFAULT_LISA_MODEL_CONV_TYPE = "llava_v1"
 
 DEVICE_GLOBAL: Final = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -162,6 +163,8 @@ class Agent_LISA(AgentIA):
         """
         device = args.get("device", DEVICE_GLOBAL)
         results = {}
+
+        self.logger(f"Chargement LISA de {args['version']}")
 
         tokenizer = AutoTokenizer.from_pretrained(
             args["version"],
@@ -245,7 +248,7 @@ class Agent_LISA(AgentIA):
         transform = ResizeLongestSide(args["image_size"])
 
         model.eval()
-        self.logger(f"Chargement LISA de {args['version']}")
+        self.logger(f"Chargement LISA : FIN")
 
         results["tokenizer"] = tokenizer
         results["model"] = model
@@ -271,20 +274,47 @@ class Agent_LISA(AgentIA):
         # 1-Gestion du prompt historique
         conv = conversation_lib.conv_templates[args["conv_type"]].copy()
         conv.messages = []
-        prompt = args["input_prompt_str"]
-        expert_info = args["input_expert_str"]
-        if args["use_mm_start_end"]:
-            replace_token = (
-                DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
-            )
-            prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
 
-        conv.append_message(conv.roles[0], DEFAULT_IMAGE_TOKEN)
-        if len(expert_info) == 0:
-            conv.append_message(conv.roles[0], expert_info)
-        conv.append_message(conv.roles[0], prompt)
+        type_prompt = args.get("type_prompt", "v0")
+        prompt_user = args["input_prompt_str"]
+        prompt_expert = args.get("input_expert_str", "")
+        # Prompt LISA chat.py (IMG + prompts)
+        if type_prompt == "v0":
+            prompt = DEFAULT_IMAGE_TOKEN + "\n" + prompt_expert + "\n" + prompt_user
+            if args["use_mm_start_end"]:
+                replace_token = (
+                    DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                )
+                prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
+            conv.append_message(conv.roles[0], prompt)  # IMG+expert+user
+        # Prompt FX init (IMG, expert, user)
+        elif type_prompt == "v1":
+            prompt = DEFAULT_IMAGE_TOKEN
+            if args["use_mm_start_end"]:
+                replace_token = (
+                    DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                )
+                prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
+            conv.append_message(conv.roles[0], prompt)  # IMG
+            if len(expert_info) == 0:
+                conv.append_message(conv.roles[0], prompt_expert)  # expert
+            conv.append_message(conv.roles[0], prompt_user)  # user
+        # Prompt LISA (IMG + expert, user)
+        elif type_prompt == "v2":
+            if len(prompt_expert) == 0:
+                prompt_expert = "Experts are struggling to analyze and explain this image."
+            prompt = DEFAULT_IMAGE_TOKEN + "\n" + prompt_expert
+            if args["use_mm_start_end"]:
+                replace_token = (
+                    DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+                )
+                prompt = prompt.replace(DEFAULT_IMAGE_TOKEN, replace_token)
+            conv.append_message(conv.roles[0], prompt)  # IMG+expert
+            conv.append_message(conv.roles[0], prompt_user)  # user
+        # end if
         conv.append_message(conv.roles[1], "")
         prompt = conv.get_prompt()
+        self.logger(f"{prompt=}")
 
         # 2-Gestion de l'image
         image_np = args["lisa_img_in"]
@@ -331,15 +361,15 @@ class Agent_LISA(AgentIA):
         )
         output_ids = output_ids[0][output_ids[0] != IMAGE_TOKEN_INDEX]
         text_output = self.tokenizer.decode(output_ids, skip_special_tokens=False)
-        text_output = text_output.replace("\n", "").replace("  ", " ")
+        self.logger(f"{text_output=}")
 
+        text_output = text_output.replace("\n", "").replace("  ", " ")
         results["text_output"] = text_output
         results["pred_masks"] = pred_masks
         self.results = results
-        self.logger(f"{text_output=}")
 
     def preprocess(self, x, pixel_mean=None, pixel_std=None,
-                   img_size=1024) -> torch.Tensor:
+                   img_size=DEFAULT_LISA_MODEL_IMAGE_SIZE) -> torch.Tensor:
         """Normalize pixel values and pad to a square input."""
         if pixel_mean is None:
             pixel_mean = torch.Tensor([123.675, 116.28, 103.53], device=x.device).view(-1, 1, 1)
@@ -359,7 +389,7 @@ class Agent_LISA(AgentIA):
 
         :param (dict) args: les arguments de la fonction
         """
-        prompt: sr = ""
+        prompt: str = ""
         if len(self.results) == 0:
             self.logger(f"Pas de résultat pour créer le prompt en {mode}", level="error")
             return
@@ -387,9 +417,10 @@ class Agent_LISA(AgentIA):
             args["save_filepath"]
             args["results_save_folder"]
         """
-        self.logger("save")
         if args is None:
             args = {}
+        image_np = args["lisa_img_in"]
+        type_save = args.get("type_save", "v1")
         filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
         img_mask_filename = f"{filename}_mask.jpg"
@@ -399,14 +430,34 @@ class Agent_LISA(AgentIA):
         filepath = os.path.join(foldername, txt_filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
-        global_mask = torch.concat(self.results["pred_masks"], dim=0).sum(dim=0, dtype=bool).cpu().numpy()
-        mask = global_mask[:, :, None]
+        # TODO: à corriger, création du masque non fonctionnel en V1
+        # V0 chat.py :
+        if type_save == "v0":
+            print("v0")
+            i = 0
+            pred_mask = self.results["pred_masks"][i]
+            pred_mask = pred_mask.detach().cpu().numpy()[0]
+            pred_mask = pred_mask > 0
+            global_mask = np.uint8(pred_mask * 100)
+            # cv2.imwrite(img_mask_filename, pred_mask * 100)
+            save_img = image_np.copy()
+            save_img[pred_mask] = (
+                image_np * 0.5
+                + pred_mask[:, :, None].astype(np.uint8) * np.array([255, 0, 0]) * 0.5
+            )[pred_mask]
+            final_img = save_img
+            # save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
+            # cv2.imwrite(img_seg_filename, save_img)
 
-        segmentation_color = np.array([255, 0, 0])
-        image_np = args["lisa_img_in"]
-        segmentation = np.ones(image_np.shape)*segmentation_color
-        final_img = (1-mask)*image_np + mask*(image_np*0.5 + segmentation*.5)
-        final_img = final_img.clip(0, 255).astype(np.uint8)
+        # V1 FX init :
+        if type_save == "v1":
+            print("v1")
+            global_mask = torch.concat(self.results["pred_masks"], dim=0).sum(dim=0, dtype=bool).cpu().numpy()
+            mask = global_mask[:, :, None]
+            segmentation_color = np.array([255, 0, 0])
+            segmentation = np.ones(image_np.shape)*segmentation_color
+            final_img = (1-mask)*image_np + mask*(image_np*0.5 + segmentation*.5)
+            final_img = final_img.clip(0, 255).astype(np.uint8)
 
         # sauvegarde du prompt réponse
         with open(filepath, "w") as f:
@@ -517,7 +568,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     # precision [--precision PRECISION] = (str)
     args["precision"] = args.get("precision", "bf16")
     # image_size [--image_size SIZE] = (int)
-    args["image_size"] = args.get("image_size", 1024)
+    args["image_size"] = args.get("image_size", DEFAULT_LISA_MODEL_IMAGE_SIZE)
     # load_in_8bit [--load_in_8bit] = (bool)
     args["load_in_8bit"] = args.get("load_in_8bit", False)
     # load_in_4bit [--load_in_4bit] = (bool)
@@ -634,16 +685,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input_prompt", type=str, required=True,
                         help="chemin du fichier prompt d'entrée")
     parser.add_argument("--input_expert", type=str, default="",
-                        help="chemin du fichier prompt des experts")
+                        help="prompt ou chemin du fichier prompt des experts")
     parser.add_argument("--version", choices=list_model_LISA,
                         default="xinlai/LISA-7B-v1-explanatory",
                         help="[défaut=LISA7B] dépôt du modèle")
     parser.add_argument("--precision", type=str, choices=list_precision_model,
                         default="bf16", help="precision for inference")
-    parser.add_argument("--image_size", default=1024, type=int,
+    parser.add_argument("--image_size", default=DEFAULT_LISA_MODEL_IMAGE_SIZE, type=int,
                         help="image size")
-    parser.add_argument("--load_in_8bit", action="store_true")
-    parser.add_argument("--load_in_4bit", action="store_true")
+    parser.add_argument("--load_in_8bit", action="store_true", default=False)
+    parser.add_argument("--load_in_4bit", action="store_true", default=False)
+    parser.add_argument("--conv_type", default=DEFAULT_LISA_MODEL_CONV_TYPE, type=str,
+                        choices=["llava_v1", "llava_llama_2"],
+                        help=f"[défaut={DEFAULT_LISA_MODEL_CONV_TYPE}] style de format de prompt")
+
+    parser.add_argument("--type_prompt", default="v0", choices=["v0", "v1", "v2"],
+                        help="""Format du prompt :\
+                        v0 = idem chat.py même conversation, IMG + prompts
+                        v1 = IMG / expert_prompt / user_prompt
+                        v2 = IMG + expert_prompt / user_prompt
+                        """)
+    parser.add_argument("--type_save", default="v1", choices=["v0", "v1"],
+                        help="""tmp format save :\
+                        v0 = idem chat.py pour la construction mais save via PIL
+                        v1 = ancien
+                        """)
 
     return parser.parse_args()
 
