@@ -430,34 +430,20 @@ class Agent_LISA(AgentIA):
         filepath = os.path.join(foldername, txt_filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
-        # TODO: à corriger, création du masque non fonctionnel en V1
-        # V0 chat.py :
-        if type_save == "v0":
-            print("v0")
-            i = 0
-            pred_mask = self.results["pred_masks"][i]
-            pred_mask = pred_mask.detach().cpu().numpy()[0]
-            pred_mask = pred_mask > 0
-            global_mask = np.uint8(pred_mask * 100)
-            # cv2.imwrite(img_mask_filename, pred_mask * 100)
-            save_img = image_np.copy()
-            save_img[pred_mask] = (
-                image_np * 0.5
-                + pred_mask[:, :, None].astype(np.uint8) * np.array([255, 0, 0]) * 0.5
-            )[pred_mask]
-            final_img = save_img
-            # save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
-            # cv2.imwrite(img_seg_filename, save_img)
-
-        # V1 FX init :
-        if type_save == "v1":
-            print("v1")
-            global_mask = torch.concat(self.results["pred_masks"], dim=0).sum(dim=0, dtype=bool).cpu().numpy()
-            mask = global_mask[:, :, None]
-            segmentation_color = np.array([255, 0, 0])
-            segmentation = np.ones(image_np.shape)*segmentation_color
-            final_img = (1-mask)*image_np + mask*(image_np*0.5 + segmentation*.5)
-            final_img = final_img.clip(0, 255).astype(np.uint8)
+        i = 0
+        pred_mask = self.results["pred_masks"][i]
+        pred_mask = pred_mask.detach().cpu().numpy()[0]
+        pred_mask = pred_mask > 0
+        global_mask = np.uint8(pred_mask * 100)
+        save_img = image_np.copy()
+        save_img[pred_mask] = (
+            image_np * 0.5
+            + pred_mask[:, :, None].astype(np.uint8) * np.array([255, 0, 0]) * 0.5
+        )[pred_mask]
+        final_img = save_img
+        # chat.py : cv2.imwrite(img_mask_filename, pred_mask * 100)
+        # chat.py : save_img = cv2.cvtColor(save_img, cv2.COLOR_RGB2BGR)
+        # chat.py : cv2.imwrite(img_seg_filename, save_img)
 
         # sauvegarde du prompt réponse
         with open(filepath, "w") as f:
@@ -704,11 +690,6 @@ def parse_args() -> argparse.Namespace:
                         v0 = idem chat.py même conversation, IMG + prompts
                         v1 = IMG / expert_prompt / user_prompt
                         v2 = IMG + expert_prompt / user_prompt
-                        """)
-    parser.add_argument("--type_save", default="v1", choices=["v0", "v1"],
-                        help="""tmp format save :\
-                        v0 = idem chat.py pour la construction mais save via PIL
-                        v1 = ancien
                         """)
 
     return parser.parse_args()
