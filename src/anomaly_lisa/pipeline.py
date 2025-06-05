@@ -61,7 +61,7 @@ class PipelineLogger:
     Exemples :
         ```
         # CAS : fonctionnement manuel
-        import Pipeline as TP
+        import pipeline as TP
         a=TP.PipelineLogger()  # =>Seulement stdout
         a=TP.PipelineLogger(filepath='tt.txt')  # => sdtout + fichier
         a=TP.PipelineLogger(filepath='tt.txt', is_print=False)  # =>Seulement fichier
@@ -71,7 +71,7 @@ class PipelineLogger:
         a.setLevel(logging.WARNING, "file")
         a("erreur", level=logging.INFO)  # Affiche en console et pas dans le fichier
         # CAS : automatique
-        import Pipeline as TP
+        import pipeline as TP
         args = {"nolog":False, "logfile":sys.stdout, "log_is_print":True, "log_folder":"log/timestamp/"}
         logger = TP.get_logger(args)
         ```
@@ -81,8 +81,9 @@ class PipelineLogger:
                  logger_name: str = __name__):
         """Initialise la classe et le logger.
 
-        :param (str) filepath:  fichier de log
-        :param (bool) is_print: indique si les logs s'affiche aussi dans stdout
+        :param (str) filepath:    fichier de log
+        :param (bool) is_print:   indique si les logs s'affiche aussi dans stdout
+        :param (str) logger_name: nom du logger à afficher dans les logs
         """
         self.file = sys.stdout
         if filepath is not None:
@@ -91,7 +92,7 @@ class PipelineLogger:
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging.INFO)
         formatter = logging.Formatter(
-            "{asctime} - {name} - {levelname} - {message}",
+            "{asctime} - {levelname} - {message}",
             style="{",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
@@ -108,16 +109,30 @@ class PipelineLogger:
 
         self.logger = logger
 
-    def __call__(self, msg: str, level: int = logging.INFO, **kwargs):
-        """Permet l'appel et wrapper sur la classe logging.Logger."""
+    def __call__(self, msg: str, level: int | str = logging.INFO, caller_name: str = "", **kwargs):
+        """Permet l'appel et wrapper sur la classe `logging.Logger.`
+
+        :param (str) msg:   message à logger
+        :param (int | str): [défaut INFO] niveau de log (cf. logging)
+        :param (str) caller_name:   nom du logger à afficher dans les logs
+        """
         log_fct = {
             logging.DEBUG: self.logger.debug,
+            "debug": self.logger.debug,
             logging.INFO: self.logger.info,
+            "info": self.logger.info,
             logging.WARNING: self.logger.warning,
+            "warning": self.logger.warning,
             logging.ERROR: self.logger.error,
+            "error": self.logger.error,
             logging.CRITICAL: self.logger.critical,
+            "critical": self.logger.critical,
         }
-        log_fct.get(level, logging.INFO)(msg, **kwargs)
+        if isinstance(level, str):
+            level = level.lower()
+        if caller_name == "":
+            caller_name = self.__class__.__name__
+        log_fct.get(level, logging.INFO)(f"{caller_name} - {msg}", **kwargs)
 
     def setLevel(self, level: int, handler: Literal["all", "console", "file", "root"] = "all"):
         """Permet de modifier le niveau de log des différentes instances.
@@ -144,6 +159,21 @@ class PipelineLogger:
             if update:
                 x.setLevel(level)
 
+    def get_logger_for(self, caller_name):
+        """Récupère un logger pré-configurer avec le nom."""
+        return LoggerProxy(self, caller_name)
+
+
+class LoggerProxy:
+    """Classe wrapper sur PipelineLogger afin de retenir le nom local du logger."""
+
+    def __init__(self, logger: PipelineLogger, caller_name: str):
+        self.logger: PipelineLogger = logger
+        self.owner_class : str = caller_name
+
+    def __call__(self, msg: str, level: int = logging.INFO, **kwargs):
+        self.logger(msg, level=level, caller_name=self.owner_class, **kwargs)
+
 
 class Pipeline:
     """Le pipeline du projet.
@@ -152,11 +182,12 @@ class Pipeline:
 
     name: str = "pipeline"
 
-    def __init__(self, logger: PipelineLogger | None):
+    def __init__(self, logger: PipelineLogger | None = None):
         """Initialise le pipeline."""
         self.logger = logger
         if logger is None:  # mode console
-            self.logger = PipelineLogger()
+            logger = PipelineLogger(logger_name=__name__)
+        self.logger = logger.get_logger_for(self.name)
 
     def test_sam_lisa(self):
         import ia_sam

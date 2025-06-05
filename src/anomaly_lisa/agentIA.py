@@ -74,9 +74,9 @@ class AgentIA:
         """Initialise cette classe générique."""
         self.model = None
         self.results: dict[str, Any] = {}
-        self.logger = logger
         if logger is None:  # mode console
-            self.logger = PipelineLogger(logger_name=__name__)
+            logger = PipelineLogger(logger_name=__name__)
+        self.logger = logger.get_logger_for(self.name)
 
     def run(self, args: dict | None = None):
         """Exécute la tâche de l'agent IA.
@@ -104,7 +104,7 @@ class AgentIA:
         """
         prompt = ""
         if len(self.results) == 0:
-            self.logger(f"Pas de résultat pour créer le prompt en {mode}", level="error")
+            self.logger(f"Pas de résultat pour créer le prompt", level=pipeline.logging.ERROR)
             return
 
         # Faire quelque pour créer le prompt.
