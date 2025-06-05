@@ -180,7 +180,7 @@ class Agent_SAM(AgentIA):
 
         image_rgb = args.get("sam_img_in")
         if image_rgb is None:
-            self.logger("image non trouvée !", level=pipeline.logging.WARNING)
+            self.logger("image non donnée !", level=pipeline.logging.WARNING)
             return results
         if isinstance(image_rgb, str):
             if not os.path.exists(image_rgb):

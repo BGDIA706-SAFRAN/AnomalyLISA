@@ -45,13 +45,26 @@ Où **args** sont a minima :
 
 
 Et en mode exécution Python des args optionnels supplémentaires sont :
- - ...
+ - pour la fonction Agent_LISA.save :
+    --> results_save_filename
+    --> results_save_folder
+ - pour la fonction Agent_LISA.run
+    --> lisa_img_in (auto-créé) avec run_process())
 
 ===========
 Exemples :
 CUDA_VISIBLE_DEVICES=1 python ia_lisa.py --input_img=LISA/1466_2L1_cut.jpg  --input_prompt "There is a defect ? Explain in details." --device cuda --savefile
 
 CUDA_VISIBLE_DEVICES=1 python ia_lisa.py --input_img=../data/MMAD/MVTec-AD/carpet/test/cut/000.png --input_prompt ./user_prompt.txt --input_expert ./expert_prompt.txt --device cuda --savefile
+
+CUDA_VISIBLE_DEVICES=2 python ia_lisa.py --input_img=../data/MMAD/MVTec-AD/bottle/test/broken_small/004.png  --input_prompt "According to experts, it is a bottle seen from above and there is a defect to the bottom left. Is there any defect in the object? if yes describe it and explain and give a segmentation mask." --device cuda --savefile --version='xinlai/LISA-13B-llama2-v1-explanatory' --type_prompt=v0
+
+Exemple dans une console Python :
+import ia_lisa
+agent = ia_lisa.Agent_LISA()  # chargement par défaut
+agent.run({"lisa_img_in":'../data/MMAD/MVTec-AD/bottle/test/broken_small/004.png'})
+agent.results.keys()
+# >> dict_keys(['text_output', 'pred_masks', 'image_np'])
 
 """
 __author__ = ['Nicolas Allègre', 'Sarah Garcia', 'Luca Hachani', 'François-Xavier Morel']
@@ -66,6 +79,7 @@ import ast
 import importlib
 import logging
 import os
+import random
 import sys
 import time
 from pprint import pprint
@@ -88,7 +102,8 @@ from LISA.model.llava import conversation as conversation_lib
 from LISA.model.llava.mm_utils import tokenizer_image_token
 from LISA.model.segment_anything.utils.transforms import ResizeLongestSide
 from LISA.utils.utils import (DEFAULT_IM_END_TOKEN, DEFAULT_IM_START_TOKEN,
-                              DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX)
+                              DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX,
+                              EXPLANATORY_QUESTION_LIST)
 
 
 ###############################################################################
@@ -129,12 +144,16 @@ class Agent_LISA(AgentIA):
 
     =============
     Exemples :
-        ...
+        import ia_lisa
+        agent = ia_lisa.Agent_LISA()  # chargement par défaut
+        agent.run({"lisa_img_in":'../data/MMAD/MVTec-AD/bottle/test/broken_small/004.png'})
+        agent.results.keys()
+        # >> dict_keys(['text_output', 'pred_masks', 'image_np'])
     """
 
     name: str = "LISA"
 
-    def __init__(self, args: dict, logger: PipelineLogger | None = None):
+    def __init__(self, args: dict | None = None, logger: PipelineLogger | None = None):
         """Initialise cette classe."""
         super().__init__(logger)
         self.models: dict = self.load(args)
@@ -147,7 +166,7 @@ class Agent_LISA(AgentIA):
     def load(self, args: dict) -> dict:
         """Charge en mémoire le modèle LISA.
 
-        :param (dict) args: les arguments nécessaire (ATTENTION : doivent exister)
+        :param (dict) args: les arguments nécessaire
             args["version"]
             args["model_max_length"]
             args["precision"]
@@ -156,16 +175,27 @@ class Agent_LISA(AgentIA):
             args["vision_tower"]
             args["image_size"]
         :return (dict): les éléments du modèle
-            results["tokenizer"] = tokenizer
-            results["model"] = model
-            results["clip_image_processor"] = clip_image_processor
-            results["transform"] = transform
+            models["tokenizer"] = tokenizer
+            models["model"] = model
+            models["clip_image_processor"] = clip_image_processor
+            models["transform"] = transform
         """
+        models: dict[str, Any] = {}
+
+        # 0-Gestion des arguments
+        if args is None:
+            args = {}
         device = args.get("device", DEVICE_GLOBAL)
-        results = {}
+        args["version"] = args.get("version", DEFAULT_LISA_MODEL)
+        args["precision"] = args.get("precision", "bf16")
+        args["image_size"] = args.get("image_size", DEFAULT_LISA_MODEL_IMAGE_SIZE)
+        args["load_in_8bit"] = args.get("load_in_8bit", False)
+        args["load_in_4bit"] = args.get("load_in_4bit", False)
+        args["model_max_length"] = args.get("model_max_length", DEFAULT_LISA_MODEL_MAX_LENGTH)
+        args["vision_tower"] = args.get("vision_tower", DEFAULT_LISA_MODEL_VISION_TOWER)
 
         self.logger(f"Chargement LISA de {args['version']}")
-
+        # 1-Chargement de LISA (cf. chat.py de LISA)
         tokenizer = AutoTokenizer.from_pretrained(
             args["version"],
             cache_dir=None,
@@ -248,36 +278,65 @@ class Agent_LISA(AgentIA):
         transform = ResizeLongestSide(args["image_size"])
 
         model.eval()
-        self.logger(f"Chargement LISA : FIN")
 
-        results["tokenizer"] = tokenizer
-        results["model"] = model
-        results["clip_image_processor"] = clip_image_processor
-        results["transform"] = transform
-        return results
+        self.logger(f"Chargement LISA : FIN")
+        models["tokenizer"] = tokenizer
+        models["model"] = model
+        models["clip_image_processor"] = clip_image_processor
+        models["transform"] = transform
+
+        return models
 
     def run(self, args: dict | None = None):
-        """Exécute la tâche de l'agent IA.
+        """Exécute la tâche de l'agent IA et enregistre les résultats dans self.results.
 
-        :param (dict) args: les arguments nécessaire (ATTENTION : doivent exister)
+        :param (dict) args: les arguments nécessaire
+            args["conv_type"]
+            args["type_prompt"]
+            args["input_prompt_str"]
+            args["input_expert_str"]
+            args["use_mm_start_end"]
+            args["lisa_img_in"]  np.array() ou Path_to_img
+            args["precision"]
             args["print"] affiche des infos (if args.get("print", False): #print)
         """
         results: dict[str, Any] = {}
 
+        # 0-Gestion des arguments
         if args is None:
             args = {}
         is_print = args.get("print", False)
         device = args.get("device", DEVICE_GLOBAL)
+        args["use_mm_start_end"] = args.get("use_mm_start_end", DEFAULT_LISA_MODEL_USE_MM_START_END)
+        args["conv_type"] = args.get("conv_type", DEFAULT_LISA_MODEL_CONV_TYPE)
+        args["precision"] = args.get("precision", "bf16")
+        args["type_prompt"] = args.get("type_prompt", "v0")
+        args["input_expert_str"] = args.get("input_expert_str", "")
+        if args.get("input_prompt_str") is None:
+            args["input_prompt_str"] = " {}".format(random.choice(EXPLANATORY_QUESTION_LIST))
+
+        image_rgb = args.get("lisa_img_in")
+        if image_rgb is None:
+            self.logger("image non donnée !", level=pipeline.logging.WARNING)
+            return
+        if isinstance(image_rgb, str):
+            if not os.path.exists(image_rgb):
+                self.logger(f"image non trouvée {image_rgb}!", level=pipeline.logging.WARNING)
+                return
+            self.logger(f"Chargement img {image_rgb}", level=pipeline.logging.INFO)
+            image_PIL = Image.open(image_rgb)
+            image_PIL = image_PIL.convert("RGB")
+            image_rgb = np.array(image_PIL)
+
         if is_print:
             print("Exécution de ", self.name)
 
-        # 1-Gestion du prompt historique
+        # 1-Gestion du prompt
+        type_prompt = args["type_prompt"]
+        prompt_user = args["input_prompt_str"]
+        prompt_expert = args["input_expert_str"]
         conv = conversation_lib.conv_templates[args["conv_type"]].copy()
         conv.messages = []
-
-        type_prompt = args.get("type_prompt", "v0")
-        prompt_user = args["input_prompt_str"]
-        prompt_expert = args.get("input_expert_str", "")
         # Prompt LISA chat.py (IMG + prompts)
         if type_prompt == "v0":
             prompt = DEFAULT_IMAGE_TOKEN + "\n" + prompt_expert + "\n" + prompt_user
@@ -317,7 +376,7 @@ class Agent_LISA(AgentIA):
         self.logger(f"{prompt=}")
 
         # 2-Gestion de l'image
-        image_np = args["lisa_img_in"]
+        image_np = image_rgb
         original_size_list = [image_np.shape[:2]]
         image_clip = (
             self.clip_image_processor.preprocess(image_np, return_tensors="pt")[
@@ -347,6 +406,7 @@ class Agent_LISA(AgentIA):
             image = image.float()
 
         # 3-Exécution
+        start_time = time.time()
         self.logger(f"Exécution LISA")
         input_ids = tokenizer_image_token(prompt, self.tokenizer, return_tensors="pt")
         input_ids = input_ids.unsqueeze(0).to(device)
@@ -362,10 +422,12 @@ class Agent_LISA(AgentIA):
         output_ids = output_ids[0][output_ids[0] != IMAGE_TOKEN_INDEX]
         text_output = self.tokenizer.decode(output_ids, skip_special_tokens=False)
         self.logger(f"{text_output=}")
+        self.logger(f"FIN exécution LISA en {time.time() - start_time:.1f} secondes")
 
         text_output = text_output.replace("\n", "").replace("  ", " ")
         results["text_output"] = text_output
         results["pred_masks"] = pred_masks
+        results["image_np"] = image_np
         self.results = results
 
     def preprocess(self, x, pixel_mean=None, pixel_std=None,
@@ -419,7 +481,6 @@ class Agent_LISA(AgentIA):
         """
         if args is None:
             args = {}
-        image_np = args["lisa_img_in"]
         type_save = args.get("type_save", "v1")
         filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
@@ -430,6 +491,7 @@ class Agent_LISA(AgentIA):
         filepath = os.path.join(foldername, txt_filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
+        image_np = self.results["image_np"]
         i = 0
         pred_mask = self.results["pred_masks"][i]
         pred_mask = pred_mask.detach().cpu().numpy()[0]
