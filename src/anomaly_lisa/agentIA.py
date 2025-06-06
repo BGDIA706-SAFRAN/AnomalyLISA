@@ -143,7 +143,7 @@ class AgentIA:
         """Sauvegarde les résultats.
 
         :param (dict) args: les arguments pour la sauvegarde du modèle
-            args["results_save_filename"]
+            args["results_save_filename"]   préfixe du nom de fichier
             args["results_save_folder"]
         """
         if args is None:
@@ -200,19 +200,14 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     args["log_is_print"] = args.get("log_is_print", not args["nolog"])
 
     is_saving = False
+    args["results_save_folder"] = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
+    args["model_save_folder"] = args.get("model_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
     args["save_filepath"] = None
-    args["save_is_print"] = args.get("save_is_print", False)
     if args["savefile"] is None or isinstance(args["savefile"], str):  # SAVE :
         is_saving = True
-        filename = args["savefile"]
-        foldername = args.get("save_folder", pipeline.DEFAULT_SAVE_FOLDER)
-        # Seul train est obligé de sauvegarder dans un fichier les autres au choix
-        if args["task"] == "train" and filename is None:
-            filename = DEFAULT_SAVE_MODEL_FILENAME
-        if filename is not None:
-            args["save_filepath"] = os.path.join(foldername, filename)
-        else:
-            args["save_is_print"] = True
+        if isinstance(args["savefile"], str) and args.get("results_save_filename") is None:
+            args["results_save_filename"] = args["savefile"]
+            args["model_save_filename"] = args["savefile"]
 
     ###
     # Gestion du flux d'exécution
@@ -244,11 +239,9 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     modes: dict[str, str] = {"run": "results", "train": "model"}
     mode: str = modes.get(args["task"], "all")
 
-    local_arg["save_filepath"] = args["save_filepath"]
-    local_arg["save_is_print"] = args["save_is_print"]
     if is_saving:
         agent.logger("Action : saving ...")
-        agent.save(mode, local_arg)
+        agent.save(mode, args)
 
     return agent
 
