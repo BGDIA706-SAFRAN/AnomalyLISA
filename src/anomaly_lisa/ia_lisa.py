@@ -474,7 +474,7 @@ class Agent_LISA(AgentIA):
         """Sauvegarde les résultats.
 
         :param (dict) args: les arguments pour la sauvegarde du modèle
-            args["save_filepath"]
+            args["results_save_filename"]   préfixe du nom de fichier "LISA" par défaut
             args["results_save_folder"]
         """
         if args is None:
@@ -482,6 +482,8 @@ class Agent_LISA(AgentIA):
         type_save = args.get("type_save", "v1")
         filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
+        args["results_save_filename"] = filename
+        args["results_save_folder"] = foldername
         img_mask_filename = f"{filename}_mask.jpg"
         img_seg_filename = f"{filename}_seg.jpg"
         txt_filename = f"{filename}_answer.txt"
@@ -489,6 +491,7 @@ class Agent_LISA(AgentIA):
         filepath = os.path.join(foldername, txt_filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
+        # TODO : à mettre dans run !
         image_np = self.results["image_np"]
         i = 0
         pred_mask = self.results["pred_masks"][i]
@@ -571,27 +574,32 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     args["device"] = args.get("device", DEVICE_GLOBAL)
     # output [--output [FOLDER]] = (str) défaut 'results'
     args["output"] = args.get("output", pipeline.DEFAULT_SAVE_FOLDER)
+    # checkpoint [--checkpoint FOLDER] = (str)
+    args["checkpoint"] = args.get("checkpoint", pipeline.DEFAULT_MODEL_FOLDER)
 
     is_saving = False
+    args["results_save_folder"] = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
+    args["model_save_folder"] = args.get("model_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
     args["save_filepath"] = None
-    args["save_is_print"] = args.get("save_is_print", False)
     if args["savefile"] is None or isinstance(args["savefile"], str):  # SAVE :
         is_saving = True
-        filename = args["savefile"]
-        foldername = args.get("save_folder", pipeline.DEFAULT_SAVE_FOLDER)
-        if filename is None:
-            if args["task"] == "train":
-                filename = DEFAULT_SAVE_MODEL_FILENAME
-            else:
-                filename = DEFAULT_SAVE_RESULT_FILENAME
-        if filename is not None:
-            args["save_filepath"] = os.path.join(foldername, filename)
-        else:
-            args["save_is_print"] = True
+        if isinstance(args["savefile"], str) and args.get("results_save_filename") is None:
+            args["results_save_filename"] = args["savefile"]
+            args["model_save_filename"] = args["savefile"]
 
     # 3.2 args spécifique LISA
+    # version [--version VERSION] = (str)
+    args["version"] = args.get("version", DEFAULT_LISA_MODEL)
+    # precision [--precision PRECISION] = (str)
+    args["precision"] = args.get("precision", "bf16")
+    # image_size [--image_size SIZE] = (int)
+    args["image_size"] = args.get("image_size", DEFAULT_LISA_MODEL_IMAGE_SIZE)
+    # load_in_8bit [--load_in_8bit] = (bool)
+    args["load_in_8bit"] = args.get("load_in_8bit", False)
+    # load_in_4bit [--load_in_4bit] = (bool)
+    args["load_in_4bit"] = args.get("load_in_4bit", False)
     # input_img --input_img FILENAME = (str) chemin de l'image
-    args["input_img"] = args.get("input_img", "image.jpg")  # défaut ??
+    args["input_img"] = args.get("input_img")
     # input_prompt --input_prompt FILENAME = (str) chemin de l'image
     args["input_prompt"] = args.get("input_prompt", "")
     if os.path.exists(args["input_prompt"]):
@@ -606,19 +614,6 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
             args["input_expert_str"] = f.read()
     else:
         args["input_expert_str"] = ""
-
-    # checkpoint [--checkpoint FOLDER] = (str)
-    args["checkpoint"] = args.get("checkpoint", pipeline.DEFAULT_MODEL_FOLDER)
-    # version [--version VERSION] = (str)
-    args["version"] = args.get("version", DEFAULT_LISA_MODEL)
-    # precision [--precision PRECISION] = (str)
-    args["precision"] = args.get("precision", "bf16")
-    # image_size [--image_size SIZE] = (int)
-    args["image_size"] = args.get("image_size", DEFAULT_LISA_MODEL_IMAGE_SIZE)
-    # load_in_8bit [--load_in_8bit] = (bool)
-    args["load_in_8bit"] = args.get("load_in_8bit", False)
-    # load_in_4bit [--load_in_4bit] = (bool)
-    args["load_in_4bit"] = args.get("load_in_4bit", False)
 
     # 3.3 args supplémentaires LISA
     args["model_max_length"] = args.get("model_max_length", DEFAULT_LISA_MODEL_MAX_LENGTH)
@@ -636,20 +631,25 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         # logger = pipeline.get_logger(args)
         logger = PipelineLogger(filepath=args["log_filepath"], is_print=args["log_is_print"], logger_name=Agent_LISA.name)
 
+    # 0.1 - Gestion de l'image :
+    if args.get("input_img") is None and args.get("lisa_img_in") is None:
+        logger("LISA a besoin d'image or aucune image n'a été fournie !", level=pipeline.logging.WARNING)
+        return
+    if args["lisa_img_in"] is None:
+        image_filename = args["input_img"]
+        image_PIL = Image.open(image_filename)
+        image_PIL = image_PIL.convert("RGB")
+        args["lisa_img_in"] = np.array(image_PIL)
+
     # 1- Création et configuration agent
     agent = Agent_LISA(args, logger=logger)
 
     # # 2- Suivant la tâche exécution de celle-ci
-    image_filename = args["input_img"]
-    image_PIL = Image.open(image_filename)
-    image_PIL = image_PIL.convert("RGB")
-    image_rgb = np.array(image_PIL)
-
     local_arg = {}
     if args["task"] == "run":
         local_arg = {
             "print": True,  # local print sans le logger
-            "lisa_img_in": image_rgb,
+            "lisa_img_in": args["lisa_img_in"],
         }
         local_arg.update(args)
         agent.logger("Action : exécution LISA courante ...")
@@ -660,13 +660,10 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
 
     # # 3-Sauvegarde
     modes: dict[str, str] = {"run": "results", "train": "model"}
-    mode: str = modes.get(args["task"], "results")
-
-    local_arg["save_filepath"] = args["save_filepath"]
-    local_arg["save_is_print"] = args["save_is_print"]
+    mode = modes.get(args["task"], "results")
     if is_saving:
         agent.logger("Action : sauvegarde ...")
-        agent.save(mode, local_arg)
+        agent.save(mode, args)
 
     return agent
 

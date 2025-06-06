@@ -344,6 +344,8 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     args["device"] = args.get("device", DEVICE_GLOBAL)
     # output [--output [FOLDER]] = (str) défaut 'results'
     args["output"] = args.get("output", pipeline.DEFAULT_SAVE_FOLDER)
+    # checkpoint [--checkpoint FOLDER] = (str)
+    args["checkpoint"] = args.get("checkpoint", pipeline.DEFAULT_MODEL_FOLDER)
 
     is_saving = False
     args["results_save_folder"] = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
@@ -360,8 +362,6 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     args["bbox"] = args.get("bbox", None)
     # model_type [--model-type VIT_TYPE] = (str) "vit_h", "vit_l", "vit_b"
     args["model_type"] = args.get("model_type", DEFAULT_SAM_MODEL)
-    # checkpoint [--checkpoint FOLDER] = (str)
-    args["checkpoint"] = args.get("checkpoint", pipeline.DEFAULT_MODEL_FOLDER)
     # input --input FILENAME = (str) chemin de l'image
     args["input"] = args.get("input")
     args["sam_img_in"] = args.get("sam_img_in")
