@@ -264,7 +264,7 @@ class Agent_SAM(AgentIA):
         """Sauvegarde les résultats.
 
         :param (dict) args: les arguments pour la sauvegarde du modèle
-            args["save_filepath"]
+            args["results_save_filename"]   préfixe du nom de fichier "SAM" par défaut
             args["results_save_folder"]
         """
         self.logger("save")
@@ -272,6 +272,8 @@ class Agent_SAM(AgentIA):
             args = {}
         filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
+        args["results_save_filename"] = filename
+        args["results_save_folder"] = foldername
         os.makedirs(foldername, exist_ok=True)
         img_mask_filename = f"{filename}_mask.jpg"
         img_bg_filename = f"{filename}_without_bg.jpg"
@@ -337,38 +339,32 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         args["log_filepath"] = os.path.join(folder, filename)
     # log_is_print = (bool) local pour afficher les log
     args["log_is_print"] = args.get("log_is_print", not args["nolog"])
+    # device [--device DEVICE] = (str) 'auto, cpu, cuda, torch_directml'
+    # args["device"] = args.get("device", utils.torch_pick_device())
+    args["device"] = args.get("device", DEVICE_GLOBAL)
+    # output [--output [FOLDER]] = (str) défaut 'results'
+    args["output"] = args.get("output", pipeline.DEFAULT_SAVE_FOLDER)
 
     is_saving = False
+    args["results_save_folder"] = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
+    args["model_save_folder"] = args.get("model_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
     args["save_filepath"] = None
-    args["save_is_print"] = args.get("save_is_print", False)
     if args["savefile"] is None or isinstance(args["savefile"], str):  # SAVE :
         is_saving = True
-        filename = args["savefile"]
-        foldername = args.get("save_folder", pipeline.DEFAULT_SAVE_FOLDER)
-        if filename is None:
-            if args["task"] == "train":
-                filename = DEFAULT_SAVE_MODEL_FILENAME
-            else:
-                filename = DEFAULT_SAVE_RESULT_FILENAME
-        if filename is not None:
-            args["save_filepath"] = os.path.join(foldername, filename)
-        else:
-            args["save_is_print"] = True
+        if isinstance(args["savefile"], str) and args.get("results_save_filename") is None:
+            args["results_save_filename"] = args["savefile"]
+            args["model_save_filename"] = args["savefile"]
 
     # 3.2 args spécifique SAM
     # bbox [--bbox ["[x1,y1,x2,y2]"]] = (str(list)) = défaut None si non indiqué
     args["bbox"] = args.get("bbox", None)
-    # input --input FILENAME = (str) chemin de l'image
-    args["input"] = args.get("input", "image.jpg")  # défaut ??
-    # output [--output [FOLDER]] = (str) défaut 'results'
-    args["output"] = args.get("output", pipeline.DEFAULT_SAVE_FOLDER)
     # model_type [--model-type VIT_TYPE] = (str) "vit_h", "vit_l", "vit_b"
     args["model_type"] = args.get("model_type", DEFAULT_SAM_MODEL)
     # checkpoint [--checkpoint FOLDER] = (str)
     args["checkpoint"] = args.get("checkpoint", pipeline.DEFAULT_MODEL_FOLDER)
-    # device [--device DEVICE] = (str) 'auto, cpu, cuda, torch_directml'
-    # args["device"] = args.get("device", utils.torch_pick_device())
-    args["device"] = args.get("device", DEVICE_GLOBAL)
+    # input --input FILENAME = (str) chemin de l'image
+    args["input"] = args.get("input")
+    args["sam_img_in"] = args.get("sam_img_in")
 
     ###
     # Gestion du flux d'exécution
@@ -379,20 +375,26 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         # logger = pipeline.get_logger(args)
         logger = PipelineLogger(filepath=args["log_filepath"], is_print=args["log_is_print"], logger_name=Agent_SAM.name)
 
+    # 0.1 - Gestion de l'image :
+    if args.get("input") is None and args.get("sam_img_in") is None:
+        logger("SAM a besoin d'image or aucune image n'a été fournie !", level=pipeline.logging.WARNING)
+        return
+    if args["sam_img_in"] is None:
+        image_filename = args["input"]
+        image_PIL = Image.open(image_filename)
+        image_PIL = image_PIL.convert("RGB")
+        args["sam_img_in"] = np.array(image_PIL)
+
     # 1- Création et configuration agent
     # agent = Agent_SAM(logger=logger, model_type="vit_b")
     agent = Agent_SAM(logger, model_type=args["model_type"], checkpoint_path=args["checkpoint"], device=args["device"])
 
     # # 2- Suivant la tâche exécution de celle-ci
-    image_filename = args["input"]
-    image_PIL = Image.open(image_filename)
-    image_PIL = image_PIL.convert("RGB")
-    image_rgb = np.array(image_PIL)
     local_arg = {}
     if args["task"] == "run":
         local_arg = {
             "print": True,  # local print sans le logger
-            "sam_img_in": image_rgb,
+            "sam_img_in": args["sam_img_in"],
             "bbox": args["bbox"],
         }
         agent.logger("Action : exécution SAM courante ...")
@@ -403,7 +405,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     elif args["task"] == "background":
         local_arg = {
             "print": True,  # local print sans le logger
-            "sam_img_in": image_rgb,
+            "sam_img_in": args["sam_img_in"],
             "bbox": args["bbox"],
         }
         agent.logger("Action : enlever le fond ...")
@@ -413,11 +415,9 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     modes: dict[str, str] = {"run": "results", "train": "model", "background": "results"}
     mode: str = modes.get(args["task"], "results")
 
-    local_arg["save_filepath"] = args["save_filepath"]
-    local_arg["save_is_print"] = args["save_is_print"]
     if is_saving:
         agent.logger("Action : sauvegarde ...")
-        agent.save(mode, local_arg)
+        agent.save(mode, args)
 
     return agent
 
