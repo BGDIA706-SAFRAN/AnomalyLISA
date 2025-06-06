@@ -58,7 +58,6 @@ __version__ = '0.2'
 # /* Modules standards */
 import argparse
 import ast
-import importlib
 import logging
 import os
 import sys
@@ -425,7 +424,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
 
 ###############################################################################
 # FONCTIONS MODE CONSOLE :
-def parse_args() -> argparse.Namespace:
+def parse_args(args_str: str | None = None) -> argparse.Namespace:
     """Gestion des arguments de l'agent SAM.
 
     ====
@@ -441,9 +440,12 @@ def parse_args() -> argparse.Namespace:
         checkpoint [--checkpoint FOLDER] = (str)
         device [--device DEVICE] = (str) 'auto, cpu, cuda, torch_directml'
 
-    :param (str) args: les arguments données au programme
+    :param (str) args_str: pour simuler les arguments données au programme
     :return (argparse.Namespace):   les arguments parsés
     """
+    if args_str is not None:
+        args_str = args_str.split()
+
     # 1 - Définition des listes de choix :
     list_task_agentIA = ["run", "train", "background"]
     list_model_SAM = ["vit_h", "vit_l", "vit_b"]
@@ -481,7 +483,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-type", type=str, choices=list_model_SAM, default=DEFAULT_SAM_MODEL,
                         help="[défaut=vit_h] modèle VIT de SAM [vit_h, vit_l, vit_b]")
 
-    return parser.parse_args()
+    return parser.parse_args(args_str)
 
 
 def main(args: argparse.Namespace) -> int:

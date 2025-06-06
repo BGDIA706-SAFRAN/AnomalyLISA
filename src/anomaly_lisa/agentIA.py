@@ -255,7 +255,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
 
 ###############################################################################
 # FONCTIONS MODE CONSOLE :
-def parse_args() -> argparse.Namespace:
+def parse_args(args_str: str | None = None) -> argparse.Namespace:
     """Gestion des arguments à modifier en fonction de l'agent IA.
 
     ====
@@ -265,9 +265,12 @@ def parse_args() -> argparse.Namespace:
         savefile [--savefile [FILENAME]] = défaut stdout, None si pas FILENAME
         nolog [--nolog] = (bool)
 
-    :param (str) args: les arguments données au programme
+    :param (str) args_str: pour simuler les arguments données au programme
     :return (argparse.Namespace):   les arguments parsés
     """
+    if args_str is not None:
+        args_str = args_str.split()
+
     # 1 - Définition des listes de choix :
     list_task_agentIA = ["run", "train"]
 
@@ -296,10 +299,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=str, default=pipeline.DEFAULT_MODEL_FOLDER,
                         help="[défaut=checkpoints] dossier où sont les poids du modèle")
 
-    # 3.2 args spécifique LISA
+    # 3.2 args spécifique AGENTX
     #
 
-    return parser.parse_args()
+    return parser.parse_args(args_str)
 
 
 def main(args: argparse.Namespace) -> int:

@@ -75,8 +75,6 @@ __version__ = '0.2'
 # IMPORTS :
 # /* Modules standards */
 import argparse
-import ast
-import importlib
 import logging
 import os
 import random
@@ -675,7 +673,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
 
 ###############################################################################
 # FONCTIONS MODE CONSOLE :
-def parse_args() -> argparse.Namespace:
+def parse_args(args_str: str | None = None) -> argparse.Namespace:
     """Gestion des arguments de l'agent.
 
     ====
@@ -692,9 +690,12 @@ def parse_args() -> argparse.Namespace:
         input_expert [--input_expert [STR | FILENAME]] = prompt ou fichier contenant le prompt
         version [--version MODEL_TYPE] = (str) choix du modèle LISA-7B, LISA-13B ou LISA++
 
-    :param (str) args: les arguments données au programme
+    :param (str) args_str: pour simuler les arguments données au programme
     :return (argparse.Namespace):   les arguments parsés
     """
+    if args_str is not None:
+        args_str = args_str.split()
+
     # 1 - Définition des listes de choix :
     list_task_agentIA = ["run", "train"]
     list_model_LISA = ["xinlai/LISA-7B-v1-explanatory",
@@ -754,7 +755,7 @@ def parse_args() -> argparse.Namespace:
                         v2 = IMG + expert_prompt / user_prompt
                         """)
 
-    return parser.parse_args()
+    return parser.parse_args(args_str)
 
 
 def main(args: argparse.Namespace) -> int:
