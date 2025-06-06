@@ -22,11 +22,14 @@ import argparse
 import importlib
 import logging
 import os
+import shlex
 import sys
 import time
 from typing import Final, Literal
 
 # /* Modules externes */
+from pprint import pprint
+
 # /* Module interne */
 
 
@@ -286,6 +289,46 @@ def get_logger(args: dict | None = None) -> PipelineLogger:
     return logger
 
 
+def find_mapping_args(args_to_map: list[str]) -> dict:
+    """Trouve le mapping des arguments IN/OUT.
+    
+    :param (dict) item:    les paramètres fournis à mapper
+    """
+    # Pour chaque agent les IN et les OUT (dans agent.results)
+    AGENT_MAPPING = {
+        "SAM": {
+            "IN": ("sam_img_in", "bbox"),
+            "OUT": ("mask", "img_without_bg", "prompt")
+        },
+        "LISA": {
+            "IN": ("lisa_img_in", "input_prompt_str", "input_expert_str"),
+            "OUT": ("mask", "img_with_mask", "text_output", "prompt")
+        }
+    }
+    results = {}
+    
+    # 1- Récupération des noms de l'agent en cours IN, et du précédent OUT
+    for item in args_to_map:
+        tmp_split = item.split('=', 1)
+        agent_curent_name = tmp_split[0].split("-", 1)[0]
+        agent_out_name = tmp_split[0].split("-", 1)[-1]
+        if AGENT_MAPPING.get(agent_curent_name) is None or AGENT_MAPPING.get(agent_curent_name) is None:
+            return results
+        
+        # 2- Mapping (args : IN1=OUT1,IN2=OUT2...)
+        args = tmp_split[-1].split(",")
+        for map_arg in args:  # (map_arg : IN1=OUT1)
+            arg_in = map_arg.split("=", 1)[0]  # l'entrée du agent en cours
+            arg_out = map_arg.split("=", 1)[-1]  # la sortie d'un précédent agent
+            set_in = AGENT_MAPPING[agent_curent_name]["IN"]
+            set_out = AGENT_MAPPING[agent_out_name]["OUT"]
+            if arg_in in set_in and arg_out in set_out:
+                results[agent_out_name] = results.get(agent_out_name, {})
+                results[agent_out_name][arg_in] = arg_out
+    
+    return results
+
+
 def run_process(args: dict | None = None) -> Pipeline:
     """Exécute le déroulé d'un pipeline.
 
@@ -300,9 +343,55 @@ def run_process(args: dict | None = None) -> Pipeline:
     if args is None:
         args = {}
 
+    # 3.1 args génériques
+    # task [--task TASK] = (str) "run", "train", ...
+    args["task"] = args.get("task", "run")
+    # nolog [--nolog] = (bool)
+    args["nolog"] = args.get("nolog", False)
+    # logfile [--logfile [FILENAME]] = défaut stdout, None si pas FILENAME
+    args["logfile"] = args.get("logfile", sys.stdout)
+    # savefile [--savefile [FILENAME]] = défaut stdout, None si pas FILENAME
+    args["savefile"] = args.get("savefile", sys.stdout)
+    # log_filepath = (str) None si pas de log en fichier
+    filename = args["logfile"] if args["logfile"] is not None else f"{Pipeline.name}.log"
+    timestamp = str(int(time.time()))
+    foldername = os.path.join(DEFAULT_LOG_FOLDER, timestamp)
+    if args["nolog"] or not isinstance(filename, str):
+        args["log_filepath"] = None
+    else:
+        folder = args.get("log_folder", foldername)
+        args["log_filepath"] = os.path.join(folder, filename)
+    # log_is_print = (bool) local pour afficher les log
+    args["log_is_print"] = args.get("log_is_print", not args["nolog"])
+
+    is_saving = False
+    args["save_filepath"] = args.get("save_filepath", None)
+    args["save_is_print"] = args.get("save_is_print", False)
+    args["save_folder"] = args.get("save_folder", os.path.join(DEFAULT_SAVE_FOLDER, timestamp))
+    if args["savefile"] is None or isinstance(args["savefile"], str):  # SAVE :
+        is_saving = True
+        filename = args["savefile"]
+        foldername = args["save_folder"]
+        if filename is not None:
+            args["save_filepath"] = os.path.join(foldername, filename)
+        else:
+            args["save_is_print"] = True
+    args["results_save_folder"] = args["save_folder"]
+
+    args_g = {}
+    args_g_name = ["nolog", "logfile", "savefile", "log_filepath", "log_is_print",
+                   "save_is_print", "save_filepath", "save_folder", "results_save_folder"]
+    for arg in args_g_name:
+        args_g[arg] = args[arg]
+
+    args["agents"] = args.get("agents", [])
+    args["agents_args"] = args.get("agents_args", [])
+    args["agents_map"] = args.get("agents_map", [])
+
     ###
     # Gestion du flux d'exécution
     ###
+    # return
     # 0 - Création du logger
     logger = get_logger(args)
 
@@ -312,11 +401,44 @@ def run_process(args: dict | None = None) -> Pipeline:
     if args.get("test_sam", False):
         pipeline.test_sam_lisa()
         return pipeline
-    
-    # ia_sam = importlib.import_module("ia_sam")
-    # args_sam = vars(ia_sam.parse_args(args["agents_args"][0]))
-    # print(args_sam)
-    # ia_sam.run_process(args_sam)
+
+    module_mapping = {"SAM": "ia_sam", "LISA": "ia_lisa", "AGENT": "agentIA"}
+    agents = []
+    for i in range(len(args["agents"])):
+        agent_name = args["agents"][i]
+        # agent_args = args["agents_args"][i]
+        # agent_map = args["agents_map"][i]
+
+        inputs = {}
+        module_name = module_mapping.get(agent_name, module_mapping["AGENT"])
+        module_agent = importlib.import_module(module_name)
+        agent_args = {}
+        if len(args["agents_args"]) > i:
+            agent_args = vars(module_agent.parse_args(args["agents_args"][i]))
+        agent_args.update(args_g)
+        
+        # Mapping des IN/OUT
+        if i > 0:
+            agent_map = {}
+            agent_map_arg = {}
+            if len(args["agents_map"]) > i:
+                agent_map = find_mapping_args(args["agents_map"][i].split(","))
+            # Simple N-1 uniquement
+            # agent_map=find_mapping_args(["LISA-SAM=lisa_img_in=img_without_bg", "SAM-LISA="])
+            # {'SAM': {'lisa_img_in': 'img_without_bg'}, 'LISA': {}}
+            post_agents = {i:args["agents"][idx] for idx in range(i,-1,-1)}
+            post_agent = agents[-1]["agent"]  # SAM précédent
+            if agent_map != {}:
+                args_map = list(agent_map.values())[0]  # le 1er agent à mapper (SAM)
+                for arg_in in args_map:
+                    agent_map_arg[arg_in] = post_agent.results[args_map[arg_in]]  # SAM.results["img_without_bg"]
+            
+            agent_args.update(agent_map_arg)
+        
+        pipeline.logger(f"Exécution {agent_name} avec {agent_args=}.")
+        agent = None
+        agent = module_agent.run_process(agent_args, logger)
+        agents.append({"agent": agent, "agent_args": agent_args})
 
     return pipeline
 
@@ -330,15 +452,19 @@ def parse_args(args_str: str | None = None) -> argparse.Namespace:
     Arguments :
         logfile [--logfile [FILENAME]] = défaut stdout, None si pas FILENAME
         nolog [--nolog] = (bool)
-        agents [--]
+        agents [--agents AGENT1,[AGENT2,...]] = liste ordonnée des agents
+        agents_args [--agents_args AGENT1="ARGS" [AGENT2="ARGS" ...]] = liste des arguments aux agents.
+        agents_map [--agents_map AGENT1-AGENT2="MAPPING"] = liste des mappings IN/OUT des agents
 
     :param (str) args_str: pour simuler les arguments données au programme
     :return (argparse.Namespace):   les arguments parsés
     """
     if args_str is not None:
-        args_str = args_str.split()
+        args_str = shlex.split(args_str)
 
     # 1 - Définition des listes de choix :
+    list_task_agentIA = ["run"]
+
     # 2 - Création du parseur à arguments:
     parser = argparse.ArgumentParser(prog="Pipeline",
                                      description="Gère les différents enchaînement des agents.",
@@ -346,32 +472,80 @@ def parse_args(args_str: str | None = None) -> argparse.Namespace:
     python pipeline.py --agents=SAM,LISA --agents_args="--task=background --input=dog.jpeg --model-type=vit_b --bbox=[65,250,631,940]" --agents_args "LISA==--input_img=LISA/1466_2L1_cut.jpg  --input_prompt 'There is a defect ? Explain in details.' --version='xinlai/LISA-13B-llama2-v1-explanatory'"
                                      """,
                                      formatter_class=argparse.RawTextHelpFormatter)
+
     # 3 - Définition des arguments :
+    # 3.1 args génériques
     parser.add_argument("--logfile", nargs='?', type=argparse.FileType("w"),
                         default=sys.stdout, help="sortie du programme")
+    parser.add_argument("--savefile", nargs='?', type=argparse.FileType("w"),
+                        default=sys.stdout,
+                        help="""\
+                            spécifie s'il faut sauvegarder.
+                            Si aucun fichier, alors stdout sauf pour 'train'
+                            """)
+    parser.add_argument("--task", type=str, choices=list_task_agentIA, default="run",
+                        help="[défaut=run] tâche à accomplir par l'agent")
     parser.add_argument("--nolog", action='store_true',
                         help="désactive les log")
+    parser.add_argument("--checkpoint", type=str, default=DEFAULT_MODEL_FOLDER,
+                        help="[défaut=checkpoints] dossier où sont les poids des modèles.")
+    parser.add_argument("--device", type=str, default="cpu",
+                        help="[défaut=cpu] device où charger le modèle [auto, cpu, cuda, torch_directml]")
+
+    # 3.2 args spécifique
     parser.add_argument("--test_sam", action='store_true')
     parser.add_argument("--agents", default=[], action="append",
                         help="Liste ordonnée d'agent à exécuter. (agent1,agent2)")
-    parser.add_argument("--agents_args", default=[], action="append",
+    parser.add_argument("--agents_args", nargs='+', default=[], action="append",
                         help="""Liste ordonnée des args pour chaque agent en forme dict (comme en ligne de commande).
     "AGENT_NAME=<args>;AGENT_NAME=<args>;..."
     --> "<args> : arg_name:value,arg_name_whitout,..."
                         """)
+    parser.add_argument("--agents_map", nargs='+', default=[], action="append",
+                        help="Liste ordonnée d'agent à exécuter. (agent1,agent2)")
 
     # 4 - Parser les arguments
     args = parser.parse_args(args_str)
 
-    # 5 - Gestion particulière des args composés
+    # 5 - Flatten agents (si "--agents=SAM,LISA")
     agents = []
-    for arg in args.agents:
-        agents_split = arg.split(",")
-        if len(agents_split) == 1:
-            agents.append(arg)
+    for entry in args.agents:
+        agents.extend(entry.split(','))
+    # end for
+    args.agents = [a.strip().upper() for a in agents]
+
+    if len(args.agents_args) == 1 and isinstance(args.agents_args[0], list):
+        args.agents_args = args.agents_args[0]
+    if len(args.agents_map) == 1 and isinstance(args.agents_map[0], list):
+        args.agents_map = args.agents_map[0]
+
+    for i, agent_name in enumerate(args.agents):
+        if len(args.agents_args) <= i:
+            args.agents_args.insert(i, "")
+
+        if len(args.agents_map) <= i:
+            args.agents_map.insert(i, "")
+
+        item = args.agents_args[i]
+        tmp_split = ["", ""]
+        if len(item) > 1:
+            tmp_split = item.split('=', 1)
+
+        if tmp_split[0] == agent_name:
+            args.agents_args[i] = tmp_split[-1]
         else:
-            agents.extend(agents_split)
-    args.agents = agents
+            if tmp_split[0] != "":
+                args.agents_args.insert(i, "")
+
+        item = args.agents_map[i]
+        tmp_split = ["", ""]
+        if len(item) > 1:
+            tmp_split = item.split('=', 1)
+
+        if tmp_split[0].split("-", 1)[0] == agent_name:
+            args.agents_map[i] = item
+        elif tmp_split[0] != "":
+            args.agents_map.insert(i, "")
 
     return args
 
