@@ -19,6 +19,7 @@ __version__ = '0.2'
 # IMPORTS :
 # /* Modules standards */
 import argparse
+import importlib
 import logging
 import os
 import sys
@@ -308,35 +309,71 @@ def run_process(args: dict | None = None) -> Pipeline:
     # 1 - Création du pipeline
     pipeline = Pipeline(logger)
 
-    pipeline.test_sam_lisa()
+    if args.get("test_sam", False):
+        pipeline.test_sam_lisa()
+        return pipeline
+    
+    # ia_sam = importlib.import_module("ia_sam")
+    # args_sam = vars(ia_sam.parse_args(args["agents_args"][0]))
+    # print(args_sam)
+    # ia_sam.run_process(args_sam)
 
     return pipeline
 
 
 ###############################################################################
 # FONCTIONS MODE CONSOLE :
-def parse_args() -> argparse.Namespace:
+def parse_args(args_str: str | None = None) -> argparse.Namespace:
     """Gestion des arguments à modifier en fonction de l'agent IA.
 
     ====
     Arguments :
         logfile [--logfile [FILENAME]] = défaut stdout, None si pas FILENAME
         nolog [--nolog] = (bool)
+        agents [--]
 
-    :param (str) args: les arguments données au programme
+    :param (str) args_str: pour simuler les arguments données au programme
     :return (argparse.Namespace):   les arguments parsés
     """
+    if args_str is not None:
+        args_str = args_str.split()
+
     # 1 - Définition des listes de choix :
     # 2 - Création du parseur à arguments:
     parser = argparse.ArgumentParser(prog="Pipeline",
-                                     description="Gère les différents enchaînement des agents.")
+                                     description="Gère les différents enchaînement des agents.",
+                                     epilog="""Exemples :
+    python pipeline.py --agents=SAM,LISA --agents_args="--task=background --input=dog.jpeg --model-type=vit_b --bbox=[65,250,631,940]" --agents_args "LISA==--input_img=LISA/1466_2L1_cut.jpg  --input_prompt 'There is a defect ? Explain in details.' --version='xinlai/LISA-13B-llama2-v1-explanatory'"
+                                     """,
+                                     formatter_class=argparse.RawTextHelpFormatter)
     # 3 - Définition des arguments :
     parser.add_argument("--logfile", nargs='?', type=argparse.FileType("w"),
                         default=sys.stdout, help="sortie du programme")
     parser.add_argument("--nolog", action='store_true',
                         help="désactive les log")
     parser.add_argument("--test_sam", action='store_true')
-    return parser.parse_args()
+    parser.add_argument("--agents", default=[], action="append",
+                        help="Liste ordonnée d'agent à exécuter. (agent1,agent2)")
+    parser.add_argument("--agents_args", default=[], action="append",
+                        help="""Liste ordonnée des args pour chaque agent en forme dict (comme en ligne de commande).
+    "AGENT_NAME=<args>;AGENT_NAME=<args>;..."
+    --> "<args> : arg_name:value,arg_name_whitout,..."
+                        """)
+
+    # 4 - Parser les arguments
+    args = parser.parse_args(args_str)
+
+    # 5 - Gestion particulière des args composés
+    agents = []
+    for arg in args.agents:
+        agents_split = arg.split(",")
+        if len(agents_split) == 1:
+            agents.append(arg)
+        else:
+            agents.extend(agents_split)
+    args.agents = agents
+
+    return args
 
 
 def main(args: argparse.Namespace) -> int:
