@@ -479,6 +479,10 @@ class Agent_LISA(AgentIA):
         """
         if args is None:
             args = {}
+        is_print = args.get("print", False)
+        if is_print:
+            print("Sauvegarde de ", self.name)
+
         type_save = args.get("type_save", "v1")
         filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
@@ -627,7 +631,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     ###
     # Gestion du flux d'exécution
     ###
-    pprint(args)  # pour test
+    pprint(pipeline.log_str_format(args))  # pour test
     # 0 - Création du logger
     if logger is None:
         # logger = pipeline.get_logger(args)

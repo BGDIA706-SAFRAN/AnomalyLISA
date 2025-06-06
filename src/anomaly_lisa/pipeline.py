@@ -28,6 +28,7 @@ import time
 from typing import Final, Literal
 
 # /* Modules externes */
+import numpy as np
 from pprint import pprint
 
 # /* Module interne */
@@ -89,6 +90,7 @@ class PipelineLogger:
         :param (bool) is_print:   indique si les logs s'affiche aussi dans stdout
         :param (str) logger_name: nom du logger à afficher dans les logs
         """
+        tmp_txt = ""
         self.file = sys.stdout
         if filepath is not None:
             self.file = filepath
@@ -110,8 +112,10 @@ class PipelineLogger:
             file_handler = logging.FileHandler(self.file, mode="a", encoding="utf-8")
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
+            tmp_txt = f"et dans {self.file}"
 
         self.logger = logger
+        self(f"Loggeur à stdout={is_print} {tmp_txt}.")
 
     def __call__(self, msg: str, level: int | str = logging.INFO, caller_name: str = "", **kwargs):
         """Permet l'appel et wrapper sur la classe `logging.Logger.`
@@ -192,6 +196,7 @@ class Pipeline:
         if logger is None:  # mode console
             logger = PipelineLogger(logger_name=__name__)
         self.logger = logger.get_logger_for(self.name)
+        self.logger("Initialisation création du Pipeline terminé.")
 
     def test_sam_lisa(self):
         import ia_sam
@@ -306,7 +311,7 @@ def find_mapping_args(args_to_map: list[str]) -> dict:
         }
     }
     results = {}
-    
+
     # 1- Récupération des noms de l'agent en cours IN, et du précédent OUT
     for item in args_to_map:
         tmp_split = item.split('=', 1)
@@ -314,7 +319,7 @@ def find_mapping_args(args_to_map: list[str]) -> dict:
         agent_out_name = tmp_split[0].split("-", 1)[-1]
         if AGENT_MAPPING.get(agent_curent_name) is None or AGENT_MAPPING.get(agent_curent_name) is None:
             return results
-        
+
         # 2- Mapping (args : IN1=OUT1,IN2=OUT2...)
         args = tmp_split[-1].split(",")
         for map_arg in args:  # (map_arg : IN1=OUT1)
@@ -325,8 +330,23 @@ def find_mapping_args(args_to_map: list[str]) -> dict:
             if arg_in in set_in and arg_out in set_out:
                 results[agent_out_name] = results.get(agent_out_name, {})
                 results[agent_out_name][arg_in] = arg_out
-    
+
     return results
+
+
+def log_str_format(obj) -> str:
+    """Retire l'affichage des tableaux Numpy dans les logs."""
+    tmp_obj = obj.copy()
+    if isinstance(tmp_obj, dict):
+        for item in tmp_obj:
+            if isinstance(tmp_obj[item], np.ndarray):
+                tmp_obj[item] = f"np.ndarray={tmp_obj[item].shape}"
+    elif isinstance(tmp_obj, list):
+        for i, item in enumerate(tmp_obj):
+            if isinstance(tmp_obj[i], np.ndarray):
+                tmp_obj[i] = f"np.ndarray={tmp_obj[i].shape}"
+
+    return tmp_obj
 
 
 def run_process(args: dict | None = None) -> Pipeline:
@@ -402,8 +422,10 @@ def run_process(args: dict | None = None) -> Pipeline:
         pipeline.test_sam_lisa()
         return pipeline
 
+    pipeline.logger(f"Arguments du Pipeline reçus : {args=}")
     module_mapping = {"SAM": "ia_sam", "LISA": "ia_lisa", "AGENT": "agentIA"}
     agents = []
+    pipeline.logger(f"Début exécution dynamique des agents.")
     for i in range(len(args["agents"])):
         agent_name = args["agents"][i]
         # agent_args = args["agents_args"][i]
@@ -435,10 +457,11 @@ def run_process(args: dict | None = None) -> Pipeline:
             
             agent_args.update(agent_map_arg)
         
-        pipeline.logger(f"Exécution {agent_name} avec {agent_args=}.")
+        pipeline.logger(f"Exécution AGENT{i}={agent_name} avec {log_str_format(agent_args)=}.")
         agent = None
         agent = module_agent.run_process(agent_args, logger)
         agents.append({"agent": agent, "agent_args": agent_args})
+        pipeline.logger(f"Fin d'exécution AGENT{i}={agent_name}")
 
     return pipeline
 
