@@ -428,8 +428,7 @@ def run_process(args: dict | None = None) -> Pipeline:
     pipeline.logger(f"Début exécution dynamique des agents.")
     for i in range(len(args["agents"])):
         agent_name = args["agents"][i]
-        # agent_args = args["agents_args"][i]
-        # agent_map = args["agents_map"][i]
+        agent_name_count = [x["agent_name"] for x in agents].count(agent_name)
 
         inputs = {}
         module_name = module_mapping.get(agent_name, module_mapping["AGENT"])
@@ -438,7 +437,7 @@ def run_process(args: dict | None = None) -> Pipeline:
         if len(args["agents_args"]) > i:
             agent_args = vars(module_agent.parse_args(args["agents_args"][i]))
         agent_args.update(args_g)
-        
+
         # Mapping des IN/OUT
         if i > 0:
             agent_map = {}
@@ -454,14 +453,16 @@ def run_process(args: dict | None = None) -> Pipeline:
                 args_map = list(agent_map.values())[0]  # le 1er agent à mapper (SAM)
                 for arg_in in args_map:
                     agent_map_arg[arg_in] = post_agent.results[args_map[arg_in]]  # SAM.results["img_without_bg"]
-            
+
             agent_args.update(agent_map_arg)
-        
-        pipeline.logger(f"Exécution AGENT{i}={agent_name} avec {log_str_format(agent_args)=}.")
+
+        agent_args["agent_add_name"] = ""
+        agent_args["agent_add_name"] = f"_{agent_name_count}"
+        pipeline.logger(f"Exécution AGENT{i}={agent_name}({agent_name}{agent_args["agent_add_name"]}) avec {log_str_format(agent_args)=}.")
         agent = None
         agent = module_agent.run_process(agent_args, logger)
-        agents.append({"agent": agent, "agent_args": agent_args})
-        pipeline.logger(f"Fin d'exécution AGENT{i}={agent_name}")
+        agents.append({"agent": agent, "agent_args": agent_args, "agent_name": agent_name})
+        pipeline.logger(f"Fin d'exécution AGENT{i}={agent_name}({agent_name}{agent_args["agent_add_name"]})")
 
     return pipeline
 

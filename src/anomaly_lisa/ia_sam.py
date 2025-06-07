@@ -120,12 +120,12 @@ class Agent_SAM(AgentIA):
         "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",  # 358M
     }
 
-    def __init__(self, logger: PipelineLogger | None = None,
+    def __init__(self, logger: PipelineLogger | None = None, logger_name: str = "",
                  model_type: str = DEFAULT_SAM_MODEL,
                  checkpoint_path: str = pipeline.DEFAULT_MODEL_FOLDER,
                  device=DEVICE_GLOBAL):
         """Initialise cette classe générique."""
-        super().__init__(logger)
+        super().__init__(logger, logger_name)
 
         self.model_type = model_type
         self.device = device
@@ -273,7 +273,7 @@ class Agent_SAM(AgentIA):
         if is_print:
             print("Sauvegarde de ", self.name)
 
-        filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
+        filename = args.get("results_save_filename", self.name)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
         args["results_save_filename"] = filename
         args["results_save_folder"] = foldername
@@ -324,6 +324,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         args = {}
 
     # 3.1 args génériques
+    args["agent_add_name"] = args.get("agent_add_name", "")
     # task [--task TASK] = (str) "run", "train", ...
     args["task"] = args.get("task", "run")
     # nolog [--nolog] = (bool)
@@ -390,7 +391,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
 
     # 1- Création et configuration agent
     # agent = Agent_SAM(logger=logger, model_type="vit_b")
-    agent = Agent_SAM(logger, model_type=args["model_type"], checkpoint_path=args["checkpoint"], device=args["device"])
+    agent = Agent_SAM(logger, model_type=args["model_type"], checkpoint_path=args["checkpoint"], device=args["device"], logger_name=args["agent_add_name"])
 
     # # 2- Suivant la tâche exécution de celle-ci
     local_arg = {}

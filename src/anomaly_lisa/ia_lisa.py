@@ -151,9 +151,11 @@ class Agent_LISA(AgentIA):
 
     name: str = "LISA"
 
-    def __init__(self, args: dict | None = None, logger: PipelineLogger | None = None):
+    def __init__(self, args: dict | None = None,
+                 logger: PipelineLogger | None = None, logger_name: str = ""):
         """Initialise cette classe."""
-        super().__init__(logger)
+        super().__init__(logger, logger_name)
+
         self.models: dict = self.load(args)
 
         self.tokenizer = self.models["tokenizer"]
@@ -304,6 +306,9 @@ class Agent_LISA(AgentIA):
         if args is None:
             args = {}
         is_print = args.get("print", False)
+        if is_print:
+            print("Exécution de ", self.name)
+
         device = args.get("device", DEVICE_GLOBAL)
         args["use_mm_start_end"] = args.get("use_mm_start_end", DEFAULT_LISA_MODEL_USE_MM_START_END)
         args["conv_type"] = args.get("conv_type", DEFAULT_LISA_MODEL_CONV_TYPE)
@@ -484,7 +489,7 @@ class Agent_LISA(AgentIA):
             print("Sauvegarde de ", self.name)
 
         type_save = args.get("type_save", "v1")
-        filename = args.get("results_save_filename", DEFAULT_SAVE_RESULT_FILENAME)
+        filename = args.get("results_save_filename", self.name)
         foldername = args.get("results_save_folder", pipeline.DEFAULT_SAVE_FOLDER)
         args["results_save_filename"] = filename
         args["results_save_folder"] = foldername
@@ -557,6 +562,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         args = {}
 
     # 3.1 args génériques
+    args["agent_add_name"] = args.get("agent_add_name", "")
     # task [--task TASK] = (str) "run", "train", ...
     args["task"] = args.get("task", "run")
     # nolog [--nolog] = (bool)
@@ -648,7 +654,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         args["lisa_img_in"] = np.array(image_PIL)
 
     # 1- Création et configuration agent
-    agent = Agent_LISA(args, logger=logger)
+    agent = Agent_LISA(args, logger=logger, logger_name=args["agent_add_name"])
 
     # # 2- Suivant la tâche exécution de celle-ci
     local_arg = {}

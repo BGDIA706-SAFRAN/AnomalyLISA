@@ -70,10 +70,11 @@ class AgentIA:
 
     name: str = "AgentIA"
 
-    def __init__(self, logger: PipelineLogger | None = None):
+    def __init__(self, logger: PipelineLogger | None = None, logger_name: str = ""):
         """Initialise cette classe générique."""
         self.model = None
         self.results: dict[str, Any] = {}
+        self.name = f"{self.name}{logger_name}"
         if logger is None:  # mode console
             logger = PipelineLogger(logger_name=__name__)
         self.logger = logger.get_logger_for(self.name)
