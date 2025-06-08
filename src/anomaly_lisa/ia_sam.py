@@ -182,10 +182,11 @@ class Agent_SAM(AgentIA):
             self.logger("image non donnée !", level=pipeline.logging.WARNING)
             return results
         if isinstance(image_rgb, str):
-            if not os.path.exists(image_rgb):
-                self.logger(f"image non trouvée {image_rgb}!", level=pipeline.logging.WARNING)
+            image_filename = image_rgb
+            if not os.path.exists(image_filename):
+                self.logger(f"chemin image non trouvée {image_filename}!", level=pipeline.logging.WARNING)
                 return
-            self.logger(f"Chargement img {image_rgb}", level=pipeline.logging.INFO)
+            self.logger(f"Chargement img {image_filename}", level=pipeline.logging.INFO)
             image_PIL = Image.open(image_rgb)
             image_PIL = image_PIL.convert("RGB")
             image_rgb = np.array(image_PIL)
@@ -385,6 +386,10 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         return
     if args["sam_img_in"] is None:
         image_filename = args["input"]
+        if not os.path.exists(image_filename):
+            logger(f"chemin image non trouvée {image_filename}!", level=pipeline.logging.WARNING)
+            return
+        logger(f"Chargement img {image_filename}", level=pipeline.logging.INFO)
         image_PIL = Image.open(image_filename)
         image_PIL = image_PIL.convert("RGB")
         args["sam_img_in"] = np.array(image_PIL)
@@ -393,7 +398,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     # agent = Agent_SAM(logger=logger, model_type="vit_b")
     agent = Agent_SAM(logger, model_type=args["model_type"], checkpoint_path=args["checkpoint"], device=args["device"], logger_name=args["agent_add_name"])
 
-    # # 2- Suivant la tâche exécution de celle-ci
+    # 2- Suivant la tâche exécution de celle-ci
     local_arg = {}
     if args["task"] == "run":
         local_arg = {
@@ -415,7 +420,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         agent.logger("Action : enlever le fond ...")
         agent.run(local_arg, mode="background")
 
-    # # 3-Sauvegarde
+    # 3-Sauvegarde
     modes: dict[str, str] = {"run": "results", "train": "model", "background": "results"}
     mode: str = modes.get(args["task"], "results")
 

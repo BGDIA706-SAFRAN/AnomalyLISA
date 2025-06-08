@@ -2,6 +2,51 @@
 
 Fichier pipeline.py : Défini le logger et le pipeline.
 
+Il fonctionne en ligne de commande ou en appel :
+    - ia_sam.run_process(**args**, [logger])
+    - python **args**
+
+Où **args** sont a minima :
+    python pipeline.py -h
+['pipeline.py', '-h']
+usage: Pipeline [-h] [--logfile [LOGFILE]] [--savefile [SAVEFILE]] [--task {run}] [--nolog] [--checkpoint CHECKPOINT]
+                [--device DEVICE] [--test_sam] [--agents AGENTS] [--agents_args AGENTS_ARGS [AGENTS_ARGS ...]]
+                [--agents_map AGENTS_MAP [AGENTS_MAP ...]]
+
+Gère les différents enchaînement des agents.
+
+options:
+  -h, --help            show this help message and exit
+  --logfile [LOGFILE]   sortie du programme
+  --savefile [SAVEFILE]
+                                                    spécifie s'il faut sauvegarder.
+                                                    Si aucun fichier, alors stdout sauf pour 'train'
+
+  --task {run}          [défaut=run] tâche à accomplir par l'agent
+  --nolog               désactive les log
+  --checkpoint CHECKPOINT
+                        [défaut=checkpoints] dossier où sont les poids des modèles.
+  --device DEVICE       [défaut=cpu] device où charger le modèle [auto, cpu, cuda, torch_directml]
+  --test_sam
+  --agents AGENTS       Liste ordonnée d'agent à exécuter. (agent1,agent2)
+  --agents_args AGENTS_ARGS [AGENTS_ARGS ...]
+                        Liste ordonnée des args pour chaque agent en forme dict (comme en ligne de commande).
+                            "AGENT_NAME=<args>;AGENT_NAME=<args>;..."
+                            --> "<args> : arg_name:value,arg_name_whitout,..."
+
+  --agents_map AGENTS_MAP [AGENTS_MAP ...]
+                        Liste ordonnée d'agent à exécuter. (agent1,agent2)
+
+Exemples :
+    python pipeline.py --agents=SAM,LISA --agents_args="SAM=--task=background --input=dog.jpeg --model-type=vit_b --bbox=[65,250,631,940]" --agents_args "LISA=--input_img=do  --input_prompt 'There is a defect ? Explain in details.' --version='xinlai/LISA-13B-llama2-v1-explanatory'" --agents_map "LISA-SAM=lisa_img_in=img_without_bg" --savefile --logfile
+
+===========
+Exemples :
+python pipeline.py --agents=SAM,SAM --agents_args "SAM=--task=background --input=dog.jpeg --model-type=vit_b --bbox=[65,250,631,900]" "SAM=--task=background --input=do --model-type=vit_b" --agents_map "SAM=" "SAM-SAM=sam_img_in=img_without_bg" --savefile --logfile
+
+python pipeline.py --agents=SAM,LISA --agents_args="SAM=--task=background --input=dog.jpeg --model-type=vit_b --bbox=[65,250,631,940]" --agents_args "LISA=--input_img=do  --input_prompt 'There is a defect ? Explain in details.' --version='xinlai/LISA-13B-llama2-v1-explanatory'" --agents_map "LISA-SAM=lisa_img_in=img_without_bg" --savefile --logfile
+
+
 MEMO vérif code : python -m pylama -l all --pydocstyle-convention pep257 *.py
     # python -m pylama -l eradicate,mccabe,pycodestyle,pydocstyle,pyflakes,pylint,radon,vulture,isort --pydocstyle-convention pep257
     # python -m mypy

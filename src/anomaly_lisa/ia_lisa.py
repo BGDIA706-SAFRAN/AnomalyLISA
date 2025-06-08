@@ -323,10 +323,11 @@ class Agent_LISA(AgentIA):
             self.logger("image non donnée !", level=pipeline.logging.WARNING)
             return
         if isinstance(image_rgb, str):
-            if not os.path.exists(image_rgb):
-                self.logger(f"image non trouvée {image_rgb}!", level=pipeline.logging.WARNING)
+            image_filename = image_rgb
+            if not os.path.exists(image_filename):
+                self.logger(f"chemin image non trouvée {image_filename}!", level=pipeline.logging.WARNING)
                 return
-            self.logger(f"Chargement img {image_rgb}", level=pipeline.logging.INFO)
+            self.logger(f"Chargement img {image_filename}", level=pipeline.logging.INFO)
             image_PIL = Image.open(image_rgb)
             image_PIL = image_PIL.convert("RGB")
             image_rgb = np.array(image_PIL)
@@ -649,6 +650,10 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
         return
     if args["lisa_img_in"] is None:
         image_filename = args["input_img"]
+        if not os.path.exists(image_filename):
+            logger(f"chemin image non trouvée {image_filename}!", level=pipeline.logging.WARNING)
+            return
+        logger(f"Chargement img {image_filename}", level=pipeline.logging.INFO)
         image_PIL = Image.open(image_filename)
         image_PIL = image_PIL.convert("RGB")
         args["lisa_img_in"] = np.array(image_PIL)
