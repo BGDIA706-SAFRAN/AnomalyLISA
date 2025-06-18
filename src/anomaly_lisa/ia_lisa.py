@@ -332,9 +332,6 @@ class Agent_LISA(AgentIA):
             image_PIL = image_PIL.convert("RGB")
             image_rgb = np.array(image_PIL)
 
-        if is_print:
-            print("Exécution de ", self.name)
-
         # 1-Gestion du prompt
         type_prompt = args["type_prompt"]
         prompt_user = args["input_prompt_str"]
@@ -648,7 +645,7 @@ def run_process(args: dict | None = None, logger: PipelineLogger | None = None) 
     if args.get("input_img") is None and args.get("lisa_img_in") is None:
         logger("LISA a besoin d'image or aucune image n'a été fournie !", level=pipeline.logging.WARNING)
         return
-    if args["lisa_img_in"] is None:
+    if args.get("lisa_img_in") is None:
         image_filename = args["input_img"]
         if not os.path.exists(image_filename):
             logger(f"chemin image non trouvée {image_filename}!", level=pipeline.logging.WARNING)

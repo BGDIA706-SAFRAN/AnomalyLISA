@@ -3,6 +3,14 @@ data/
 logs/
 checkpoints/
 results/
+SAM/
+LISA/
+
+# Pour fonctionnement avec lien symbolique :
+SAM
+LISA
+checkpoints
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

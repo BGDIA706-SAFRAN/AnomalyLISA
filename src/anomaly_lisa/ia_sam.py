@@ -301,6 +301,7 @@ class Agent_SAM(AgentIA):
 
         # sauvegarde d'un prompt expert
         if self.results.get("prompt") is not None:
+            filepath = os.path.join(foldername, prompt_filename)
             with open(filepath, "w") as f:
                 self.logger(f"Sauvegarde du prompt expert : {filepath}")
                 f.write(self.results["prompt"])

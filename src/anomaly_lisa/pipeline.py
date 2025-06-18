@@ -503,11 +503,11 @@ def run_process(args: dict | None = None) -> Pipeline:
 
         agent_args["agent_add_name"] = ""
         agent_args["agent_add_name"] = f"_{agent_name_count}"
-        pipeline.logger(f"Exécution AGENT{i}={agent_name}({agent_name}{agent_args["agent_add_name"]}) avec {log_str_format(agent_args)=}.")
+        pipeline.logger(f"Exécution AGENT{i}={agent_name}({agent_name}{agent_args['agent_add_name']}) avec {log_str_format(agent_args)=}.")
         agent = None
         agent = module_agent.run_process(agent_args, logger)
         agents.append({"agent": agent, "agent_args": agent_args, "agent_name": agent_name})
-        pipeline.logger(f"Fin d'exécution AGENT{i}={agent_name}({agent_name}{agent_args["agent_add_name"]})")
+        pipeline.logger(f"Fin d'exécution AGENT{i}={agent_name}({agent_name}{agent_args['agent_add_name']})")
 
     return pipeline
 
